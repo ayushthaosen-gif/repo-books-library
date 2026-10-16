@@ -32,10 +32,10 @@ function render() {
   ul.replaceChildren();
   for (const b of items) {
     const li = document.createElement('li');
-    const cover = b.cover ? Object.assign(document.createElement('img'), { src: b.cover, alt: '', loading: 'lazy' }) : Object.assign(document.createElement('div'), { className: 'ph', textContent: '📖' });
-    if (b.cover) cover.onerror = () => cover.replaceWith(Object.assign(document.createElement('div'), { className: 'ph', textContent: '📖' }));
+    const cover = b.cover ? Object.assign(document.createElement('img'), { src: b.cover, alt: '', loading: 'lazy' }) : placeholder(b);
+    if (b.cover) cover.onerror = () => cover.replaceWith(placeholder(b));
     const info = document.createElement('div');
-    for (const [cls, text] of [['t', b.title], ['a', b.author], ['n', [b.room, b.notes].filter(Boolean).join(' · ')]]) {
+    for (const [cls, text] of [['t', b.title], ['a', b.author], ['abs', ((readCache()[b.id] || {}).description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()], ['n', [b.room, b.notes].filter(Boolean).join(' · ')]]) {
       if (!text) continue;
       info.append(Object.assign(document.createElement('div'), { className: cls, textContent: text }));
     }
@@ -44,9 +44,11 @@ function render() {
     if (tab === 'library') {
       const st = b.status || 'unread';
       badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + st, textContent: STATUS_LABEL[st] }));
-      if (b.rating) badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '★'.repeat(b.rating) }));
       if (b.lentTo) badges.append(Object.assign(document.createElement('span'), { className: 'badge lent', textContent: 'Lent to ' + b.lentTo }));
     }
+    const pub = (readCache()[b.id] || {}).rating;
+    if (b.rating) badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '★'.repeat(b.rating), title: 'Your rating' }));
+    else if (pub) badges.append(Object.assign(document.createElement('span'), { className: 'badge pub', textContent: '★ ' + pub.toFixed(1), title: 'Google Books rating' }));
     if (badges.childElementCount) info.append(badges);
     li.append(cover, info);
     if (tab === 'wishlist') {
@@ -77,7 +79,7 @@ $('#f-sort').onchange = () => { try { localStorage.setItem('books-library-sort',
 // ---- book detail ----
 const ddlg = $('#detail-dialog');
 const DKEY = 'books-library-details-v1';
-const readCache = () => { try { return JSON.parse(localStorage.getItem(DKEY)) || {}; } catch (e) { return {}; } };
+function readCache() { try { return JSON.parse(localStorage.getItem(DKEY)) || {}; } catch (e) { return {}; } }
 function writeCache(id, v) { try { const c = readCache(); c[id] = v; localStorage.setItem(DKEY, JSON.stringify(c)); } catch (e) {} }
 let detailBook = null;
 $('#d-cover').onerror = () => { $('#d-cover').hidden = true; };
@@ -271,11 +273,56 @@ $('#btn-csv').onclick = () => {
   a.click();
 };
 
+// ---- covers ----
+function placeholder(b) {
+  let h = 0;
+  for (const c of b.title || '') h = (h * 31 + c.charCodeAt(0)) % 360;
+  const d = document.createElement('div');
+  d.className = 'ph';
+  d.style.background = `hsl(${h} 35% 32%)`;
+  d.textContent = b.title || '';
+  return d;
+}
+
+async function findCover(b) {
+  if (b.isbn) {
+    try { const r = await Lookup.byIsbn(b.isbn); if (r && r.cover) return r.cover; } catch (e) {}
+  }
+  const r = await Lookup.byTitle(b.title, b.author);
+  return (r && r.cover) || '';
+}
+
+// Quietly looks up covers for books that have none (at most once per book per device per day).
+async function autoCovers() {
+  if (!navigator.onLine) return;
+  let tried = {};
+  try { tried = JSON.parse(localStorage.getItem('books-library-cover-tried') || '{}'); } catch (e) {}
+  const today = new Date().toISOString().slice(0, 10);
+  const covers = async () => { for (const b of Store.all().filter(b => !b.cover && tried[b.id] !== today)) {
+    tried[b.id] = today;
+    try {
+      const cover = await findCover(b);
+      if (cover) Store.upsert({ id: b.id, cover });
+    } catch (e) {}
+  } };
+  // Descriptions, public star ratings (and a last-resort cover) from Google Books
+  const dets = async () => { for (const b of Store.all().filter(b => !readCache()[b.id] && tried['d' + b.id] !== today)) {
+    tried['d' + b.id] = today;
+    try {
+      const d = await Lookup.details(b);
+      if (d) { writeCache(b.id, d); if (!b.cover && d.cover) Store.upsert({ id: b.id, cover: d.cover }); else render(); }
+    } catch (e) {}
+  } };
+  await Promise.all([covers(), dets()]);
+  try { localStorage.setItem('books-library-cover-tried', JSON.stringify(tried)); } catch (e) {}
+}
+setTimeout(autoCovers, 4000);
+
 // ---- fill missing details ----
 $('#btn-fill').onclick = async () => {
   const btn = $('#btn-fill');
-  const todo = Store.all().filter(b => !b.isbn && (!b.author || !b.cover));
-  if (!todo.length) return alert('Nothing to fill in: every book without an ISBN already has an author and a cover.');
+  const todo = Store.all().filter(b => !b.cover || (!b.isbn && !b.author));
+  if (!todo.length) return alert('Nothing to fill in: every book already has a cover.');
   if (!navigator.onLine) return alert('You are offline. Try again when connected.');
   const filled = [], notFound = [];
   let failed = 0;
@@ -286,7 +333,7 @@ $('#btn-fill').onclick = async () => {
       const r = await Lookup.byTitle(b.title, b.author);
       const patch = {};
       if (r && !b.author && r.author) patch.author = r.author;
-      if (r && !b.cover && r.cover) patch.cover = r.cover;
+      if (!b.cover) { const c = (r && r.cover) || await findCover(b); if (c) patch.cover = c; }
       if (Object.keys(patch).length) { Store.upsert({ id: b.id, ...patch }); filled.push(b.title + (patch.author ? ' (author: ' + patch.author + ')' : '')); }
       else notFound.push(b.title);
     } catch (e) { failed++; notFound.push(b.title); }
