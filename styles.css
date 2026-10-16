@@ -70,3 +70,5 @@ input[type=date]{-webkit-appearance:none;appearance:none;min-width:0;max-width:1
 
 dialog form>.row:last-child,#detail-dialog .row:last-child{position:sticky;bottom:-16px;background:var(--bg);padding:10px 0 calc(10px + env(safe-area-inset-bottom));margin-top:8px;border-top:1px solid var(--line);z-index:1}
 body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+
+[hidden]{display:none!important}

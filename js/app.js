@@ -358,13 +358,15 @@ $('#btn-csv').onclick = () => {
 
 // ---- covers ----
 const sameTitle = (a, b) => { const n = s => (s || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim(); return n(a.split(':')[0]) === n(b.split(':')[0]); };
+// Without an author on either side we cannot tell books apart, so only a shared surname counts as a match.
+const sameAuthor = (a, b) => { const last = s => (s || '').toLowerCase().split(',')[0].replace(/[^a-z ]+/g, ' ').trim().split(/\s+/).pop(); return !last(b) || !!last(a) && (a || '').toLowerCase().includes(last(b)); };
 async function findCover(b) {
   const tries = b.kind === 'game'
     ? [async () => Lookup.gameCover(b.title, b.isbn)]
     : [
       async () => b.isbn && (await Lookup.byIsbn(b.isbn)).cover,
       async () => (await Lookup.byTitle(b.title, b.author) || {}).cover,
-      async () => ((await Lookup.searchTitle(b.title)).find(r => r.cover && sameTitle(r.title, b.title)) || {}).cover,
+      async () => ((await Lookup.searchTitle(b.title)).find(r => r.cover && sameTitle(r.title, b.title) && sameAuthor(r.author, b.author)) || {}).cover,
     ];
   for (const t of tries) { try { const c = await t(); if (c) return c; } catch (e) {} }
   return '';
