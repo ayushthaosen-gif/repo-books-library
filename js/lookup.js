@@ -191,7 +191,7 @@ const Lookup = (() => {
       title: p.title.replace(/\s*\((board |card |tabletop |dice )?game\)$/i, ''),
       author: '', isbn: '',
       cover: p.thumbnail ? p.thumbnail.source : '',
-      desc: p.extract || '',
+      desc: (p.extract || '').replace(/\s*\((?:[;,]\s*)?(?:from|pronounced|\/)[^)]*\)/i, '').replace(/\(\s*[;,]?\s*\)/g, '').replace(/\s{2,}/g, ' ').trim(),
     }));
   }
   // Games: best-effort cover picture. Tries the exact Wikipedia article (with common game suffixes),

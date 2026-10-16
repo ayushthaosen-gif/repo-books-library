@@ -107,6 +107,7 @@ function paintDetail(b, d) {
   const rt = $('#d-rating');
   rt.hidden = !(d && d.rating);
   if (d && d.rating) rt.textContent = `★ ${d.rating.toFixed(1)} / 5` + (d.ratings ? ` (${d.ratings.toLocaleString()} ratings on Google Books)` : ' (Google Books)');
+  $('#d-about-h').textContent = 'About this book';
   $('#d-desc').textContent = d ? (d.description || 'No description found for this book.') : 'No description found for this book.';
   const meta = [d && d.publisher, d && d.published, d && d.pages ? d.pages + ' pages' : '', d && d.categories].filter(Boolean);
   $('#d-meta').textContent = meta.join(' · ');
@@ -149,7 +150,8 @@ async function openDetail(b) {
     $('#d-cover').hidden = false;
     $('#d-cover').src = pic(b) || genericCover(b);
     $('#d-rating').hidden = true; $('#d-meta').textContent = '';
-    $('#d-desc').textContent = b.desc || (b.notes ? '' : 'Tap Edit to add notes, player count or play time.');
+    $('#d-about-h').textContent = 'About this game';
+    $('#d-desc').textContent = (b.desc || '').replace(/\(\s*[;,]\s*(?:from|pronounced)[^)]*\)/i, '').replace(/\(\s*[;,]?\s*\)/g, '').replace(/\s{2,}/g, ' ').trim() || (b.notes ? '' : 'Tap Edit to add notes, player count or play time.');
     $('#d-links').replaceChildren(Object.assign(document.createElement('a'), { href: 'https://boardgamegeek.com/geeksearch.php?action=search&objecttype=boardgame&q=' + encodeURIComponent(b.title), textContent: 'Look up on BoardGameGeek', target: '_blank', rel: 'noopener' }));
     if (!ddlg.open) ddlg.showModal();
     return;
