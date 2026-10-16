@@ -60,6 +60,8 @@ document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   tab = btn.dataset.tab;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b === btn));
   render();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 });
 $('#search').oninput = render;
 ['#f-room', '#f-status', '#f-lent'].forEach(s => $(s).onchange = render);
@@ -92,6 +94,8 @@ form.onsubmit = e => {
   tab = v.list;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   render();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 };
 $('#edit-cancel').onclick = () => dlg.close();
 $('#edit-delete').onclick = () => { if (confirm('Delete this book?')) { Store.remove(editingId); dlg.close(); render(); } };
@@ -110,9 +114,14 @@ async function handleIsbn(raw) {
     const found = await Lookup.byIsbn(raw);
     stopScan();
     if (found) openEdit({ ...found, list });
-    else openEdit({ isbn: Store.cleanIsbn(raw), list, notes: '' }), alert('No details found for that ISBN. Fill in the title by hand.');
+    else {
+      openEdit({ isbn: Store.cleanIsbn(raw), list });
+      const warn = $('#edit-warn');
+      warn.hidden = false;
+      warn.textContent = 'No details found for this ISBN. Fill in the title and author by hand.';
+    }
   } catch (e) {
-    status.textContent = e.message + ' Try again or type the ISBN.';
+    status.textContent = e.message + ' You can also type the ISBN.';
   } finally {
     busy = false;
   }
@@ -122,7 +131,13 @@ $('#btn-scan').onclick = async () => {
   status.textContent = 'Starting camera…';
   sdlg.showModal();
   try {
-    await Scanner.start($('#video'), handleIsbn);
+    const torch = $('#torch');
+    torch.hidden = true;
+    await Scanner.start($('#video'), handleIsbn, toggle => {
+      torch.hidden = false;
+      torch.onclick = async () => { torch.textContent = (await toggle()) ? 'Torch off' : 'Torch on'; };
+      torch.textContent = 'Torch on';
+    });
     status.textContent = 'Point the camera at the barcode on the back of the book.';
   } catch (e) {
     status.textContent = 'Camera unavailable (' + e.message + '). You can type the ISBN instead.';
@@ -148,4 +163,69 @@ $('#file-import').onchange = async e => {
   e.target.value = '';
 };
 
+// Starter books: added once per ISBN (so deleting one later does not bring it back).
+async function seedStarterBooks() {
+  try {
+    const seeded = JSON.parse(localStorage.getItem('books-library-seeded') || '[]');
+    const books = await (await fetch('seed-books.json')).json();
+    let added = 0;
+    // With sync on, wait for the first pull so another device's copy (or delete) is respected.
+    if (Sync.configured() && !Sync.hasPulled()) return;
+    for (const b of books) {
+      if (seeded.includes(b.isbn)) continue;
+      seeded.push(b.isbn);
+      const id = 'seed-' + b.isbn;
+      if (!Store.getIncludingDeleted(id) && !Store.findByIsbn(b.isbn)) { Store.upsert({ ...b, id }); added++; }
+    }
+    localStorage.setItem('books-library-seeded', JSON.stringify(seeded));
+    if (added) render();
+  } catch (e) {}
+}
+
+// ---- sync ----
+const sydlg = $('#sync-dialog'), sform = $('#sync-form');
+function showSyncState() {
+  const on = Sync.configured();
+  $('#sync-now').hidden = $('#sync-out').hidden = !on;
+  $('#sync-signin').textContent = on ? 'Sign in again' : 'Sign in and sync';
+}
+Sync.onStatus(({ state, msg }) => {
+  $('#sync-text').textContent = msg;
+  $('#btn-sync').className = 'link sync-' + state;
+  const m = $('#sync-msg');
+  m.hidden = state !== 'error' || !sydlg.open;
+  m.textContent = msg;
+  if (state === 'ok') seedStarterBooks();
+});
+$('#btn-sync').onclick = () => {
+  const s = Sync.settings();
+  for (const f of ['url', 'key', 'email']) sform.elements[f].value = s[f];
+  sform.elements.password.value = '';
+  $('#sync-msg').hidden = true;
+  showSyncState();
+  sydlg.showModal();
+};
+sform.onsubmit = async e => {
+  e.preventDefault();
+  const v = sform.elements;
+  $('#sync-msg').hidden = true;
+  try {
+    await Sync.signIn(v.url.value, v.key.value, v.email.value, v.password.value);
+    v.password.value = '';
+    showSyncState();
+    sydlg.close();
+  } catch (err) {
+    $('#sync-msg').hidden = false;
+    $('#sync-msg').textContent = err.message;
+  }
+};
+$('#sync-close').onclick = () => sydlg.close();
+$('#sync-now').onclick = () => Sync.now();
+$('#sync-out').onclick = () => { Sync.signOut(); showSyncState(); };
+
 render();
+Store.onChange(render);
+Sync.start();
+seedStarterBooks();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

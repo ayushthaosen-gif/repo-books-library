@@ -1,14 +1,14 @@
 :root{--bg:#faf8f4;--fg:#222;--muted:#6b6b6b;--accent:#2f5d50;--card:#fff;--line:#e4dfd6;--danger:#b3261e}
 @media(prefers-color-scheme:dark){:root{--bg:#161815;--fg:#eee;--muted:#a0a0a0;--accent:#6fb59f;--card:#20231f;--line:#333;--danger:#f2877f}}
 *{box-sizing:border-box}
-body{margin:0;font:16px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--fg);padding-bottom:130px}
-header{padding:12px 16px;position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);z-index:2}
+body{margin:0;-webkit-tap-highlight-color:transparent;font:16px/1.4 system-ui,sans-serif;background:var(--bg);color:var(--fg);padding-bottom:130px}
+header{padding:calc(12px + env(safe-area-inset-top)) 16px 12px;position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);z-index:2}
 h1{margin:0 0 8px;font-size:1.3rem}
 nav{display:flex;gap:8px;margin-bottom:8px}
 nav button{flex:1;background:var(--card);color:var(--fg);border:1px solid var(--line)}
 nav button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-input,select{width:100%;padding:10px;font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
-button{padding:10px 14px;font:inherit;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
+input,select{width:100%;min-height:44px;padding:10px;font-size:16px;font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
+button{min-height:44px;padding:10px 14px;font:inherit;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
 button.secondary{background:var(--card);color:var(--fg);border:1px solid var(--line)}
 button.danger{background:var(--danger)}
 button.link,label.link{background:none;color:var(--muted);text-decoration:underline;font-size:.9rem;cursor:pointer}
@@ -18,17 +18,17 @@ li{display:flex;gap:12px;background:var(--card);border:1px solid var(--line);bor
 li img,.ph{width:48px;height:72px;object-fit:cover;border-radius:4px;background:var(--line);flex:none}
 .ph{display:flex;align-items:center;justify-content:center;color:var(--muted)}
 li .t{font-weight:600}li .a,li .n{color:var(--muted);font-size:.9rem}
-li .move{margin-left:auto;align-self:center;font-size:.8rem;padding:6px 8px}
+li .move{margin-left:auto;align-self:center;font-size:.85rem;padding:8px 12px}
 #empty{color:var(--muted);text-align:center;padding:32px 0}
-.fab{position:fixed;bottom:44px;left:0;right:0;display:flex;gap:8px;padding:0 16px}
+.fab{position:fixed;bottom:calc(52px + env(safe-area-inset-bottom));left:0;right:0;display:flex;gap:8px;padding:0 16px}
 .fab button{flex:1;padding:14px;box-shadow:0 2px 8px #0003}
-footer{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:20px;padding:10px;background:var(--bg)}
+footer{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:20px;padding:6px 10px calc(6px + env(safe-area-inset-bottom));background:var(--bg)}
 dialog{border:0;border-radius:14px;padding:16px;width:min(92vw,440px);background:var(--bg);color:var(--fg)}
 dialog::backdrop{background:#0008}
 dialog h2{margin:0 0 8px;font-size:1.1rem}
 dialog label{display:block;margin:8px 0;font-size:.9rem;color:var(--muted)}
 .row{display:flex;gap:8px;align-items:center;margin:8px 0}
-.video-wrap{background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3}
+.video-wrap{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3}
 video{width:100%;height:100%;object-fit:cover}
 #edit-cover{width:80px;border-radius:4px;display:block;margin-bottom:8px}
 .warn{color:var(--danger);font-size:.9rem}
@@ -40,3 +40,12 @@ video{width:100%;height:100%;object-fit:cover}
 .badge{font-size:.75rem;padding:1px 8px;border-radius:99px;background:var(--line);color:var(--fg)}
 .badge.lent{background:var(--danger);color:#fff}
 .badge.read{background:var(--accent);color:#fff}
+.reticle{position:absolute;inset:30% 8%;border:2px solid #fff9;border-radius:10px;box-shadow:0 0 0 999px #0005;pointer-events:none}
+.row input[type=radio]{width:auto;min-height:0}
+#torch{margin:8px 0;width:100%}
+button.link,label.link{min-height:44px;display:inline-flex;align-items:center}
+dialog{max-height:92vh;overflow:auto}
+.hint{font-size:.85rem;color:var(--muted);margin:0 0 4px}
+#sync-dot{font-size:.7rem}
+.sync-ok #sync-dot{color:#2e9e5b}.sync-busy #sync-dot{color:#d9a400}.sync-error #sync-dot{color:var(--danger)}
+footer{flex-wrap:wrap;gap:4px 16px}
