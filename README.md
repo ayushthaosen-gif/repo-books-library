@@ -23,3 +23,12 @@ A static web app (no build step). Open it on your phone, then:
 - Data is stored in the browser (`localStorage`) on that device. Use **Export backup / Import backup** to move or save it.
 
 Camera access needs https (or localhost). Run locally with `python3 -m http.server`, or host it free on GitHub Pages: merge to `main`, then in the repo go to Settings > Pages and set Source to "GitHub Actions". The workflow in `.github/workflows/pages.yml` publishes it at `https://<user>.github.io/repo-books-library/`. (`netlify.toml` is also included for Netlify.)
+
+## Using it
+
+1. Open https://ayushthaosen-gif.github.io/repo-books-library/ on your phone and add it to the home screen.
+2. **Scan** a book's barcode (the one with the ISBN on the back). Check the details, tap Save, and the scanner reopens for the next book. Untick "Keep scanning" to scan one at a time.
+3. No barcode? Tap **Add by hand**, or type the ISBN in the scan window.
+4. Put a book on the **Wishlist** by choosing that list when you add it; tap **Got it** when you buy it.
+5. Sort by newest, title or author, and filter by shelf, reading status or lent out.
+6. Turn on sync once (docs/SYNC.md) so the library is kept safe off the phone.

@@ -23,6 +23,11 @@ function render() {
     (!room || b.room === room) &&
     (!status || (b.status || 'unread') === status) &&
     (!lentOnly || b.lentTo));
+  const sort = $('#f-sort').value;
+  const byText = f => (x, y) => (x[f] || '\uffff').localeCompare(y[f] || '\uffff', undefined, { sensitivity: 'base' });
+  if (sort === 'title') items.sort(byText('title'));
+  else if (sort === 'author') items.sort(byText('author'));
+  else items.sort((x, y) => (y.added || '').localeCompare(x.added || ''));
   const ul = $('#list');
   ul.replaceChildren();
   for (const b of items) {
@@ -53,7 +58,9 @@ function render() {
   }
   const empty = $('#empty');
   empty.hidden = items.length > 0;
-  empty.textContent = q ? 'No matches.' : tab === 'library' ? 'No books yet. Tap Scan or Add by hand.' : 'Your wishlist is empty.';
+  empty.textContent = q ? 'No matches.' : tab === 'library'
+    ? 'No books yet. Tap Scan and point the camera at the barcode on the back of a book, or tap Add by hand for books without one.'
+    : 'Your wishlist is empty. Scan or add a book you want and choose Wishlist.';
 }
 
 document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
@@ -62,13 +69,16 @@ document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   render();
 });
 $('#search').oninput = render;
+try { $('#f-sort').value = localStorage.getItem('books-library-sort') || 'added'; } catch (e) {}
+$('#f-sort').onchange = () => { try { localStorage.setItem('books-library-sort', $('#f-sort').value); } catch (e) {} render(); };
 ['#f-room', '#f-status', '#f-lent'].forEach(s => $(s).onchange = render);
 
 // ---- add / edit ----
 const dlg = $('#edit-dialog'), form = $('#edit-form');
-let editingId = null;
+let editingId = null, fromScan = false;
 
-function openEdit(b = {}) {
+function openEdit(b = {}, scanned = false) {
+  fromScan = scanned;
   editingId = b.id || null;
   $('#edit-title').textContent = b.id ? 'Edit book' : 'Add a book';
   for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'notes']) form.elements[f].value = b[f] || '';
@@ -90,10 +100,13 @@ form.onsubmit = e => {
   Store.upsert(v);
   dlg.close();
   tab = v.list;
+  const again = fromScan && $('#keep-scanning').checked;
+  fromScan = false;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   render();
+  if (again) setTimeout(() => $('#btn-scan').click(), 150);
 };
-$('#edit-cancel').onclick = () => dlg.close();
+$('#edit-cancel').onclick = () => { const again = fromScan && $('#keep-scanning').checked; fromScan = false; dlg.close(); if (again) setTimeout(() => $('#btn-scan').click(), 150); };
 $('#edit-delete').onclick = () => { if (confirm('Delete this book?')) { Store.remove(editingId); dlg.close(); render(); } };
 $('#btn-add').onclick = () => openEdit({});
 
@@ -109,9 +122,9 @@ async function handleIsbn(raw) {
   try {
     const found = await Lookup.byIsbn(raw);
     stopScan();
-    if (found) openEdit({ ...found, list });
+    if (found) openEdit({ ...found, list }, true);
     else {
-      openEdit({ isbn: Store.cleanIsbn(raw), list });
+      openEdit({ isbn: Store.cleanIsbn(raw), list }, true);
       const warn = $('#edit-warn');
       warn.hidden = false;
       warn.textContent = 'No details found for this ISBN. Fill in the title and author by hand.';

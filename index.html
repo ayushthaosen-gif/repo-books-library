@@ -26,6 +26,9 @@
     </select>
     <label class="chk"><input id="f-lent" type="checkbox"> Lent out</label>
   </div>
+  <select id="f-sort" aria-label="Sort order" class="sort">
+    <option value="added">Newest first</option><option value="title">Title A to Z</option><option value="author">Author A to Z</option>
+  </select>
 </header>
 
 <main>
@@ -54,6 +57,7 @@
     <input id="isbn-manual" inputmode="numeric" placeholder="Or type the ISBN">
     <button type="button" id="isbn-go">Look up</button>
   </form>
+  <label class="row"><input id="keep-scanning" type="checkbox" checked style="width:auto;min-height:0"> Keep scanning after each book</label>
   <label class="row"><input type="radio" name="scan-target" value="library" checked> Add to Library</label>
   <label class="row"><input type="radio" name="scan-target" value="wishlist"> Add to Wishlist</label>
   <button type="button" id="scan-close" class="secondary">Close</button>
