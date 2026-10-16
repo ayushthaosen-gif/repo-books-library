@@ -19,4 +19,4 @@ A static web app (no build step). Open it on your phone, then:
 - **Library / Wishlist** tabs, search, and a "Got it" button that moves a wishlist book into the library.
 - Data is stored in the browser (`localStorage`) on that device. Use **Export backup / Import backup** to move or save it.
 
-Camera access needs https (or localhost). Run locally with `python3 -m http.server`, or deploy the folder to Netlify (`netlify.toml` included).
+Camera access needs https (or localhost). Run locally with `python3 -m http.server`, or host it free on GitHub Pages: merge to `main`, then in the repo go to Settings > Pages and set Source to "GitHub Actions". The workflow in `.github/workflows/pages.yml` publishes it at `https://<user>.github.io/repo-books-library/`. (`netlify.toml` is also included for Netlify.)
