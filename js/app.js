@@ -44,6 +44,7 @@ function render() {
     if (tab === 'library') {
       const st = b.status || 'unread';
       badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + st, textContent: STATUS_LABEL[st] }));
+      if (b.rating) badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '★'.repeat(b.rating) }));
       if (b.lentTo) badges.append(Object.assign(document.createElement('span'), { className: 'badge lent', textContent: 'Lent to ' + b.lentTo }));
     }
     if (badges.childElementCount) info.append(badges);
@@ -109,7 +110,21 @@ async function openDetail(b) {
   else { const st = b.status || 'unread'; badge(st, STATUS_LABEL[st]); }
   if (b.room) badge('', b.room);
   if (b.lentTo) badge('lent', 'Lent to ' + b.lentTo);
-  if (b.notes) badge('', b.notes);
+  const mine = $('#d-mine');
+  mine.replaceChildren();
+  const row = (k, v, bar) => {
+    const p = document.createElement('p');
+    p.append(Object.assign(document.createElement('span'), { className: 'k', textContent: k + ': ' }), document.createTextNode(v));
+    if (bar != null) p.append(Object.assign(document.createElement('div'), { className: 'bar' }));
+    if (bar != null) p.lastChild.append(Object.assign(document.createElement('i'), { style: `width:${bar}%` }));
+    mine.append(p);
+  };
+  const pages = (readCache()[b.id] || {}).pages;
+  if (b.rating) row('My rating', '★'.repeat(b.rating) + '☆'.repeat(5 - b.rating));
+  if (b.review) row('My review', b.review);
+  if (b.page) row('Progress', pages ? `page ${b.page} of ${pages} (${Math.min(100, Math.round(b.page / pages * 100))}%)` : `page ${b.page}`, pages ? Math.min(100, Math.round(b.page / pages * 100)) : null);
+  if (b.lentTo) row('Lent', `to ${b.lentTo}` + (b.lentSince ? ` since ${new Date(b.lentSince).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''));
+  if (b.notes) row('Notes', b.notes);
   $('#d-move').hidden = b.list !== 'wishlist';
   const cached = readCache()[b.id];
   paintDetail(b, cached);
@@ -136,7 +151,9 @@ function openEdit(b = {}, scanned = false) {
   fromScan = scanned;
   editingId = b.id || null;
   $('#edit-title').textContent = b.id ? 'Edit book' : 'Add a book';
-  for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'notes']) form.elements[f].value = b[f] || '';
+  for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
+  form.elements.rating.value = b.rating || '';
+  $('#find-results').hidden = true;
   form.elements.status.value = b.status || 'unread';
   form.elements.list.value = b.list || tab;
   $('#edit-cover').hidden = !b.cover;
@@ -152,6 +169,11 @@ form.onsubmit = e => {
   e.preventDefault();
   const v = Object.fromEntries(new FormData(form));
   if (editingId) v.id = editingId;
+  v.rating = v.rating ? +v.rating : 0;
+  v.page = v.page ? +v.page : 0;
+  const today = new Date().toISOString().slice(0, 10);
+  if (!v.lentTo.trim()) v.lentSince = '';
+  else if (!v.lentSince) v.lentSince = today;
   Store.upsert(v);
   dlg.close();
   tab = v.list;
@@ -160,6 +182,32 @@ form.onsubmit = e => {
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   render();
   if (again) setTimeout(() => $('#btn-scan').click(), 150);
+};
+$('#find-btn').onclick = async () => {
+  const q = [form.elements.title.value, form.elements.author.value].filter(Boolean).join(' ').trim();
+  const out = $('#find-results');
+  if (!q) { out.hidden = false; out.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Type a title first.' })); return; }
+  out.hidden = false;
+  out.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Searching…' }));
+  try {
+    const rs = await Lookup.searchTitle(q);
+    out.replaceChildren();
+    if (!rs.length) { out.append(Object.assign(document.createElement('li'), { textContent: 'No matches. Fill in the details by hand.' })); return; }
+    for (const r of rs) {
+      const li = document.createElement('li');
+      li.append(Object.assign(document.createElement('div'), { className: 't', textContent: r.title }), Object.assign(document.createElement('div'), { className: 'a', textContent: r.author }));
+      li.onclick = () => {
+        form.elements.title.value = r.title;
+        if (r.author) form.elements.author.value = r.author;
+        if (r.isbn && !form.elements.isbn.value) form.elements.isbn.value = r.isbn;
+        if (r.cover && !form.elements.cover.value) { form.elements.cover.value = r.cover; $('#edit-cover').src = r.cover; $('#edit-cover').hidden = false; }
+        out.hidden = true;
+      };
+      out.append(li);
+    }
+  } catch (e) {
+    out.replaceChildren(Object.assign(document.createElement('li'), { textContent: e.message }));
+  }
 };
 $('#edit-cancel').onclick = () => { const again = fromScan && $('#keep-scanning').checked; fromScan = false; dlg.close(); if (again) setTimeout(() => $('#btn-scan').click(), 150); };
 $('#edit-delete').onclick = () => { if (confirm('Delete this book?')) { Store.remove(editingId); dlg.close(); render(); } };
@@ -210,6 +258,18 @@ $('#btn-scan').onclick = async () => {
 $('#scan-close').onclick = stopScan;
 sdlg.addEventListener('close', () => Scanner.stop());
 $('#isbn-go').onclick = () => handleIsbn($('#isbn-manual').value);
+
+// ---- CSV export ----
+$('#btn-csv').onclick = () => {
+  const cols = ['title', 'author', 'isbn', 'list', 'status', 'rating', 'review', 'page', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
+  const esc = v => { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const csv = [cols.join(','), ...Store.all().map(b => cols.map(c => esc(b[c])).join(','))].join('\r\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })),
+    download: 'books-library.csv',
+  });
+  a.click();
+};
 
 // ---- fill missing details ----
 $('#btn-fill').onclick = async () => {

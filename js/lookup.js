@@ -120,5 +120,23 @@ const Lookup = (() => {
       link: i.infoLink || '',
     };
   }
-  return { byIsbn, byTitle, details };
+
+  // Title search for the Add form: up to 8 candidates from Open Library and Google Books.
+  async function searchTitle(text) {
+    const isbnOf = a => (a || []).find(x => /^\d{13}$/.test(x)) || '';
+    const ol = getJson('https://openlibrary.org/search.json?limit=8&fields=title,subtitle,author_name,cover_i,isbn&q=' + encodeURIComponent(text))
+      .then(j => (j.docs || []).map(d => ({ title: [d.title, d.subtitle].filter(Boolean).join(': '), author: (d.author_name || []).slice(0, 2).join(', '), cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : '', isbn: isbnOf(d.isbn) })));
+    const gb = getJson('https://www.googleapis.com/books/v1/volumes?maxResults=8&q=' + encodeURIComponent(text))
+      .then(j => (j.items || []).map(v => { const i = v.volumeInfo || {}; const id = (i.industryIdentifiers || []).find(x => x.type === 'ISBN_13'); return { title: i.title ? i.title + (i.subtitle ? ': ' + i.subtitle : '') : '', author: (i.authors || []).slice(0, 2).join(', '), cover: ((i.imageLinks || {}).thumbnail || '').replace('http://', 'https://'), isbn: id ? id.identifier : '' }; }));
+    const [a, b] = await Promise.allSettled([ol, gb]);
+    if (a.status === 'rejected' && b.status === 'rejected') throw new Error('Could not reach the book databases.');
+    const seen = new Set(), out = [];
+    for (const r of [...(a.value || []), ...(b.value || [])]) {
+      const k = norm(r.title) + '|' + norm(r.author);
+      if (!r.title || seen.has(k)) continue;
+      seen.add(k); out.push(r);
+    }
+    return out.slice(0, 8);
+  }
+  return { byIsbn, byTitle, details, searchTitle };
 })();
