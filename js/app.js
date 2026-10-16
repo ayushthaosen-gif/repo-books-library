@@ -163,6 +163,23 @@ $('#file-import').onchange = async e => {
   e.target.value = '';
 };
 
+// Starter books: added once per ISBN (so deleting one later does not bring it back).
+async function seedStarterBooks() {
+  try {
+    const seeded = JSON.parse(localStorage.getItem('books-library-seeded') || '[]');
+    const books = await (await fetch('seed-books.json')).json();
+    let added = 0;
+    for (const b of books) {
+      if (seeded.includes(b.isbn)) continue;
+      seeded.push(b.isbn);
+      if (!Store.findByIsbn(b.isbn)) { Store.upsert(b); added++; }
+    }
+    localStorage.setItem('books-library-seeded', JSON.stringify(seeded));
+    if (added) render();
+  } catch (e) {}
+}
+
 render();
+seedStarterBooks();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

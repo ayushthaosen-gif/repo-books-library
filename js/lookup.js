@@ -1,4 +1,4 @@
-// ISBN -> book details. Open Library and Google Books are asked at the same time; first answer with data wins.
+// ISBN -> book details. Several sources are asked at the same time; first answer with data wins.
 const Lookup = (() => {
   const TIMEOUT_MS = 8000;
 
@@ -32,6 +32,29 @@ const Lookup = (() => {
       isbn,
     };
   }
+  // Open Library's search index and edition records sometimes hold books the bibkeys API above does not.
+  async function openLibrarySearch(isbn) {
+    const d = ((await getJson(`https://openlibrary.org/search.json?isbn=${isbn}&fields=title,subtitle,author_name,cover_i&limit=1`)).docs || [])[0];
+    if (!d) return null;
+    return {
+      title: [d.title, d.subtitle].filter(Boolean).join(': '),
+      author: (d.author_name || []).join(', '),
+      cover: d.cover_i ? `https://covers.openlibrary.org/b/id/${d.cover_i}-M.jpg` : '',
+      isbn,
+    };
+  }
+  async function openLibraryEdition(isbn) {
+    const d = await getJson(`https://openlibrary.org/isbn/${isbn}.json`).catch(e => { if (/HTTP 404/.test(e.message)) return null; throw e; });
+    if (!d || !d.title) return null;
+    let author = '';
+    try { if (d.authors && d.authors[0]) author = (await getJson(`https://openlibrary.org${d.authors[0].key}.json`)).name || ''; } catch (e) {}
+    return {
+      title: [d.title, d.subtitle].filter(Boolean).join(': '),
+      author,
+      cover: d.covers && d.covers[0] > 0 ? `https://covers.openlibrary.org/b/id/${d.covers[0]}-M.jpg` : '',
+      isbn,
+    };
+  }
   function toIsbn13(isbn) {
     if (isbn.length === 13) return isbn;
     const core = '978' + isbn.slice(0, 9);
@@ -48,12 +71,13 @@ const Lookup = (() => {
     const id = toIsbn13(isbn);
     if (!navigator.onLine) return Promise.reject(new Error('You are offline. Reconnect to look up details, or add the book by hand.'));
     return new Promise((resolve, reject) => {
-      let pending = 2, failed = 0;
+      const sources = [openLibrary, googleBooks, openLibrarySearch, openLibraryEdition];
+      let pending = sources.length, failed = 0;
       const done = () => {
         if (--pending) return;
-        reject(failed === 2 ? new Error('Could not reach the book databases. Check your connection and try again.') : null);
+        reject(failed === sources.length ? new Error('Could not reach the book databases. Check your connection and try again.') : null);
       };
-      for (const fn of [openLibrary, googleBooks]) {
+      for (const fn of sources) {
         fn(id).then(b => { if (b && b.title) resolve(b); else done(); }, () => { failed++; done(); });
       }
     }).catch(e => { if (e) throw e; return null; });
