@@ -199,7 +199,14 @@ async function seedStarterBooks() {
     const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     for (const b of books) {
       const id = b.seedId || 'seed-' + b.isbn;
-      if (seeded.includes(id) || (b.isbn && seeded.includes(b.isbn))) continue;
+      if (seeded.includes(id) || (b.isbn && seeded.includes(b.isbn))) {
+        // Already added: only fill fields that are still blank, never overwrite the user's edits.
+        const have = Store.get(id);
+        const patch = {};
+        for (const f of ['author', 'isbn', 'cover']) if (have && !have[f] && b[f]) patch[f] = b[f];
+        if (Object.keys(patch).length) { Store.upsert({ id, ...patch }); added++; }
+        continue;
+      }
       seeded.push(id);
       const dup = Store.all().some(x => (b.isbn && x.isbn === b.isbn) || norm(x.title) === norm(b.title));
       if (!Store.getIncludingDeleted(id) && !dup) { Store.upsert({ ...b, id, seedId: undefined }); added++; }
