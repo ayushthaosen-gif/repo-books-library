@@ -91,7 +91,9 @@ const Lookup = (() => {
     if (author) q.set('author', author.split(',')[0]);
     const docs = (await getJson('https://openlibrary.org/search.json?' + q)).docs || [];
     const want = norm(title.split(':')[0]);
-    const hit = docs.find(d => norm(d.title) === want && (d.author_name || d.cover_i));
+    const last = norm((author || '').split(',')[0]).split(' ').pop();
+    const sameAuthor = d => !last || (d.author_name || []).some(n => norm(n).includes(last));
+    const hit = docs.find(d => norm(d.title) === want && sameAuthor(d) && (d.author_name || d.cover_i));
     if (!hit) return null;
     return {
       author: (hit.author_name || []).slice(0, 2).join(', '),
