@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#2f5d50">
+<title>Books Library</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <h1>Books Library</h1>
+  <nav>
+    <button data-tab="library" class="active">Library <span id="count-library">0</span></button>
+    <button data-tab="wishlist">Wishlist <span id="count-wishlist">0</span></button>
+  </nav>
+  <input id="search" type="search" placeholder="Search title, author, shelf, notes">
+  <div class="filters">
+    <select id="f-room" aria-label="Shelf or room"><option value="">All shelves</option></select>
+    <select id="f-status" aria-label="Reading status">
+      <option value="">Any status</option><option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option>
+    </select>
+    <label class="chk"><input id="f-lent" type="checkbox"> Lent out</label>
+  </div>
+</header>
+
+<main>
+  <ul id="list"></ul>
+  <p id="empty" hidden></p>
+</main>
+
+<div class="fab">
+  <button id="btn-scan">Scan</button>
+  <button id="btn-add" class="secondary">Add by hand</button>
+</div>
+
+<footer>
+  <button id="btn-export" class="link">Export backup</button>
+  <label class="link">Import backup<input id="file-import" type="file" accept="application/json" hidden></label>
+</footer>
+
+<dialog id="scan-dialog">
+  <h2>Scan a barcode</h2>
+  <div class="video-wrap"><video id="video" playsinline muted></video></div>
+  <p id="scan-status">Point the camera at the barcode on the back of the book.</p>
+  <form method="dialog" class="row">
+    <input id="isbn-manual" inputmode="numeric" placeholder="Or type the ISBN">
+    <button type="button" id="isbn-go">Look up</button>
+  </form>
+  <label class="row"><input type="radio" name="scan-target" value="library" checked> Add to Library</label>
+  <label class="row"><input type="radio" name="scan-target" value="wishlist"> Add to Wishlist</label>
+  <button type="button" id="scan-close" class="secondary">Close</button>
+</dialog>
+
+<dialog id="edit-dialog">
+  <form id="edit-form">
+    <h2 id="edit-title">Add a book</h2>
+    <img id="edit-cover" alt="" hidden>
+    <label>Title <input name="title" required></label>
+    <label>Author <input name="author"></label>
+    <label>ISBN (optional) <input name="isbn" inputmode="numeric"></label>
+    <label>Cover image URL (optional) <input name="cover" type="url"></label>
+    <label>Shelf / room <input name="room" list="rooms" placeholder="e.g. Living room, shelf 2"></label>
+    <datalist id="rooms"></datalist>
+    <label>Reading status
+      <select name="status"><option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option></select>
+    </label>
+    <label>Lent to (leave empty if at home) <input name="lentTo" placeholder="e.g. Priya"></label>
+    <label>Notes <input name="notes"></label>
+    <label>List
+      <select name="list"><option value="library">Library</option><option value="wishlist">Wishlist</option></select>
+    </label>
+    <p id="edit-warn" class="warn" hidden></p>
+    <div class="row">
+      <button type="submit">Save</button>
+      <button type="button" id="edit-cancel" class="secondary">Cancel</button>
+      <button type="button" id="edit-delete" class="danger" hidden>Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="vendor/zxing.min.js"></script>
+<script src="js/store.js"></script>
+<script src="js/lookup.js"></script>
+<script src="js/scanner.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
