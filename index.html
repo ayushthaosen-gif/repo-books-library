@@ -15,7 +15,14 @@
     <button data-tab="library" class="active">Library <span id="count-library">0</span></button>
     <button data-tab="wishlist">Wishlist <span id="count-wishlist">0</span></button>
   </nav>
-  <input id="search" type="search" placeholder="Search title, author, location">
+  <input id="search" type="search" placeholder="Search title, author, shelf, notes">
+  <div class="filters">
+    <select id="f-room" aria-label="Shelf or room"><option value="">All shelves</option></select>
+    <select id="f-status" aria-label="Reading status">
+      <option value="">Any status</option><option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option>
+    </select>
+    <label class="chk"><input id="f-lent" type="checkbox"> Lent out</label>
+  </div>
 </header>
 
 <main>
@@ -54,7 +61,13 @@
     <label>Author <input name="author"></label>
     <label>ISBN (optional) <input name="isbn" inputmode="numeric"></label>
     <label>Cover image URL (optional) <input name="cover" type="url"></label>
-    <label>Location / notes <input name="notes" placeholder="e.g. Living room shelf 2"></label>
+    <label>Shelf / room <input name="room" list="rooms" placeholder="e.g. Living room, shelf 2"></label>
+    <datalist id="rooms"></datalist>
+    <label>Reading status
+      <select name="status"><option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option></select>
+    </label>
+    <label>Lent to (leave empty if at home) <input name="lentTo" placeholder="e.g. Priya"></label>
+    <label>Notes <input name="notes"></label>
     <label>List
       <select name="list"><option value="library">Library</option><option value="wishlist">Wishlist</option></select>
     </label>

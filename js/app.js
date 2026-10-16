@@ -1,13 +1,28 @@
 const $ = s => document.querySelector(s);
 let tab = 'library';
 
+const STATUS_LABEL = { unread: 'Unread', reading: 'Reading', read: 'Read' };
+
+function refreshRooms() {
+  const rooms = [...new Set(Store.all().map(b => (b.room || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const sel = $('#f-room'), cur = sel.value;
+  sel.replaceChildren(new Option('All shelves', ''), ...rooms.map(r => new Option(r, r)));
+  sel.value = rooms.includes(cur) ? cur : '';
+  $('#rooms').replaceChildren(...rooms.map(r => new Option(r)));
+}
+
 function render() {
+  refreshRooms();
   const q = $('#search').value.trim().toLowerCase();
+  const room = $('#f-room').value, status = $('#f-status').value, lentOnly = $('#f-lent').checked;
   const all = Store.all();
   $('#count-library').textContent = all.filter(b => b.list === 'library').length;
   $('#count-wishlist').textContent = all.filter(b => b.list === 'wishlist').length;
   const items = all.filter(b => b.list === tab &&
-    (!q || [b.title, b.author, b.notes, b.isbn].some(f => (f || '').toLowerCase().includes(q))));
+    (!q || [b.title, b.author, b.room, b.notes, b.isbn, b.lentTo].some(f => (f || '').toLowerCase().includes(q))) &&
+    (!room || b.room === room) &&
+    (!status || (b.status || 'unread') === status) &&
+    (!lentOnly || b.lentTo));
   const ul = $('#list');
   ul.replaceChildren();
   for (const b of items) {
@@ -15,10 +30,18 @@ function render() {
     const cover = b.cover ? Object.assign(document.createElement('img'), { src: b.cover, alt: '', loading: 'lazy' }) : Object.assign(document.createElement('div'), { className: 'ph', textContent: '📖' });
     if (b.cover) cover.onerror = () => cover.replaceWith(Object.assign(document.createElement('div'), { className: 'ph', textContent: '📖' }));
     const info = document.createElement('div');
-    for (const [cls, text] of [['t', b.title], ['a', b.author], ['n', b.notes]]) {
+    for (const [cls, text] of [['t', b.title], ['a', b.author], ['n', [b.room, b.notes].filter(Boolean).join(' · ')]]) {
       if (!text) continue;
       info.append(Object.assign(document.createElement('div'), { className: cls, textContent: text }));
     }
+    const badges = document.createElement('div');
+    badges.className = 'badges';
+    if (tab === 'library') {
+      const st = b.status || 'unread';
+      badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + st, textContent: STATUS_LABEL[st] }));
+      if (b.lentTo) badges.append(Object.assign(document.createElement('span'), { className: 'badge lent', textContent: 'Lent to ' + b.lentTo }));
+    }
+    if (badges.childElementCount) info.append(badges);
     li.append(cover, info);
     if (tab === 'wishlist') {
       const mv = Object.assign(document.createElement('button'), { className: 'move', textContent: 'Got it' });
@@ -39,6 +62,7 @@ document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   render();
 });
 $('#search').oninput = render;
+['#f-room', '#f-status', '#f-lent'].forEach(s => $(s).onchange = render);
 
 // ---- add / edit ----
 const dlg = $('#edit-dialog'), form = $('#edit-form');
@@ -47,7 +71,8 @@ let editingId = null;
 function openEdit(b = {}) {
   editingId = b.id || null;
   $('#edit-title').textContent = b.id ? 'Edit book' : 'Add a book';
-  for (const f of ['title', 'author', 'isbn', 'cover', 'notes']) form.elements[f].value = b[f] || '';
+  for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'notes']) form.elements[f].value = b[f] || '';
+  form.elements.status.value = b.status || 'unread';
   form.elements.list.value = b.list || tab;
   $('#edit-cover').hidden = !b.cover;
   if (b.cover) $('#edit-cover').src = b.cover;

@@ -15,6 +15,7 @@ A static web app (no build step). Open it on your phone, then:
 
 - **Scan** opens the camera and reads the ISBN barcode (native `BarcodeDetector`, with ZXing as a fallback). Details come from Open Library, then Google Books. You can also type an ISBN.
 - **Add by hand** for books with no ISBN.
+- **Shelf/room, reading status (unread/reading/read) and "lent to"**, with filters for each (including a "Lent out" filter).
 - **Library / Wishlist** tabs, search, and a "Got it" button that moves a wishlist book into the library.
 - Data is stored in the browser (`localStorage`) on that device. Use **Export backup / Import backup** to move or save it.
 
