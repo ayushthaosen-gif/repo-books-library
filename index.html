@@ -52,15 +52,15 @@
 </footer>
 
 <dialog id="scan-dialog">
-  <h2>Scan a barcode</h2>
+  <h2 id="scan-title">Scan a barcode</h2>
   <div class="video-wrap"><video id="video" playsinline muted></video><div class="reticle"></div></div>
   <button type="button" id="torch" class="secondary" hidden>Torch</button>
   <p id="scan-status">Point the camera at the barcode on the back of the book.</p>
   <form method="dialog" class="row">
-    <input id="isbn-manual" inputmode="numeric" placeholder="Or type the ISBN">
+    <input id="isbn-manual" inputmode="numeric" placeholder="Or type the number under the barcode">
     <button type="button" id="isbn-go">Look up</button>
   </form>
-  <label class="row"><input id="keep-scanning" type="checkbox" checked style="width:auto;min-height:0"> Keep scanning after each book</label>
+  <label class="row"><input id="keep-scanning" type="checkbox" checked style="width:auto;min-height:0"> Keep scanning after each one</label>
   <label class="row"><input type="radio" name="scan-target" value="library" checked> Add to Library</label>
   <label class="row"><input type="radio" name="scan-target" value="wishlist"> Add to Wishlist</label>
   <button type="button" id="scan-close" class="secondary">Close</button>
@@ -112,7 +112,9 @@
     <img id="edit-cover" alt="" hidden>
     <label>Title <input name="title" required></label>
     <button type="button" id="find-btn" data-book class="secondary">Find details by title</button>
+    <button type="button" id="find-game" class="secondary" data-game hidden>Find details by name</button>
     <ul id="find-results" class="find" hidden></ul>
+    <input type="hidden" name="desc">
     <label><span id="lbl-author">Author</span> <input name="author"></label>
     <label data-book>ISBN (optional) <input name="isbn" inputmode="numeric"></label>
     <label data-game hidden>Players <input name="players" placeholder="e.g. 2-4"></label>

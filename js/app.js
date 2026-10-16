@@ -22,7 +22,6 @@ function render() {
   $('#count-games').textContent = all.filter(isGame).length;
   const games = tab === 'games';
   $('#f-status').hidden = games;
-  $('#btn-scan').hidden = games;
   $('#btn-add').textContent = games ? 'Add a game' : 'Add by hand';
   $('#btn-add').className = games ? '' : 'secondary';
   const items = all.filter(b => (games ? isGame(b) : !isGame(b) && b.list === tab) &&
@@ -146,7 +145,7 @@ async function openDetail(b) {
     $('#d-cover').hidden = !b.cover;
     if (b.cover) $('#d-cover').src = b.cover;
     $('#d-rating').hidden = true; $('#d-meta').textContent = '';
-    $('#d-desc').textContent = b.notes ? '' : 'Tap Edit to add notes, player count or play time.';
+    $('#d-desc').textContent = b.desc || (b.notes ? '' : 'Tap Edit to add notes, player count or play time.');
     $('#d-links').replaceChildren(Object.assign(document.createElement('a'), { href: 'https://boardgamegeek.com/geeksearch.php?action=search&objecttype=boardgame&q=' + encodeURIComponent(b.title), textContent: 'Look up on BoardGameGeek', target: '_blank', rel: 'noopener' }));
     if (!ddlg.open) ddlg.showModal();
     return;
@@ -181,7 +180,7 @@ function openEdit(b = {}, scanned = false) {
   $('#lbl-author').textContent = game ? 'Publisher or designer' : 'Author';
   document.querySelectorAll('[data-book]').forEach(e => e.hidden = game);
   document.querySelectorAll('[data-game]').forEach(e => e.hidden = !game);
-  for (const f of ['players', 'playtime']) form.elements[f].value = b[f] || '';
+  for (const f of ['players', 'playtime', 'desc']) form.elements[f].value = b[f] || '';
   for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
   form.elements.rating.value = b.rating || '';
   $('#find-results').hidden = true;
@@ -215,14 +214,15 @@ form.onsubmit = e => {
   render();
   if (again) setTimeout(() => $('#btn-scan').click(), 150);
 };
-$('#find-btn').onclick = async () => {
-  const q = [form.elements.title.value, form.elements.author.value].filter(Boolean).join(' ').trim();
+$('#find-game').onclick = () => runFind(Lookup.searchGame, form.elements.title.value.trim());
+$('#find-btn').onclick = () => runFind(Lookup.searchTitle, [form.elements.title.value, form.elements.author.value].filter(Boolean).join(' ').trim());
+async function runFind(search, q) {
   const out = $('#find-results');
   if (!q) { out.hidden = false; out.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Type a title first.' })); return; }
   out.hidden = false;
   out.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Searching…' }));
   try {
-    const rs = await Lookup.searchTitle(q);
+    const rs = await search(q);
     out.replaceChildren();
     if (!rs.length) { out.append(Object.assign(document.createElement('li'), { textContent: 'No matches. Fill in the details by hand.' })); return; }
     for (const r of rs) {
@@ -231,6 +231,7 @@ $('#find-btn').onclick = async () => {
       li.onclick = () => {
         form.elements.title.value = r.title;
         if (r.author) form.elements.author.value = r.author;
+        if (r.desc) form.elements.desc.value = r.desc;
         if (r.isbn && !form.elements.isbn.value) form.elements.isbn.value = r.isbn;
         if (r.cover && !form.elements.cover.value) { form.elements.cover.value = r.cover; $('#edit-cover').src = r.cover; $('#edit-cover').hidden = false; }
         out.hidden = true;
@@ -240,7 +241,7 @@ $('#find-btn').onclick = async () => {
   } catch (e) {
     out.replaceChildren(Object.assign(document.createElement('li'), { textContent: e.message }));
   }
-};
+}
 $('#edit-cancel').onclick = () => { const again = fromScan && $('#keep-scanning').checked; fromScan = false; dlg.close(); if (again) setTimeout(() => $('#btn-scan').click(), 150); };
 $('#edit-delete').onclick = () => { if (confirm('Delete this ' + (editingKind === 'game' ? 'game' : 'book') + '?')) { Store.remove(editingId); dlg.close(); render(); } };
 $('#btn-add').onclick = () => openEdit({});
@@ -249,12 +250,26 @@ $('#btn-add').onclick = () => openEdit({});
 const sdlg = $('#scan-dialog'), status = $('#scan-status');
 let busy = false;
 
+let scanGames = false;
 async function handleIsbn(raw) {
   if (busy) return;
   busy = true;
   status.textContent = 'Looking up ' + raw + '…';
   const list = document.querySelector('input[name=scan-target]:checked').value;
   try {
+    if (scanGames) {
+      raw = raw.replace(/\D/g, '');
+      let found = null;
+      try { found = await Lookup.byBarcode(raw); } catch (e) { found = null; }
+      stopScan();
+      openEdit({ ...(found || {}), kind: 'game', notes: found ? '' : 'Barcode ' + raw, list }, true);
+      if (!found) {
+        const warn = $('#edit-warn');
+        warn.hidden = false;
+        warn.textContent = 'No match for this barcode. Type the name and tap Find details by name, or fill it in by hand.';
+      }
+      return;
+    }
     const found = await Lookup.byIsbn(raw);
     stopScan();
     if (found) openEdit({ ...found, list }, true);
@@ -272,6 +287,8 @@ async function handleIsbn(raw) {
 }
 function stopScan() { Scanner.stop(); if (sdlg.open) sdlg.close(); }
 $('#btn-scan').onclick = async () => {
+  scanGames = tab === 'games';
+  $('#scan-title').textContent = scanGames ? 'Scan a game barcode' : 'Scan a barcode';
   status.textContent = 'Starting camera…';
   sdlg.showModal();
   try {
@@ -281,8 +298,8 @@ $('#btn-scan').onclick = async () => {
       torch.hidden = false;
       torch.onclick = async () => { torch.textContent = (await toggle()) ? 'Torch off' : 'Torch on'; };
       torch.textContent = 'Torch on';
-    });
-    status.textContent = 'Point the camera at the barcode on the back of the book.';
+    }, scanGames ? 'product' : 'isbn');
+    status.textContent = scanGames ? 'Point the camera at the barcode on the game box.' : 'Point the camera at the barcode on the back of the book.';
   } catch (e) {
     status.textContent = 'Camera unavailable (' + e.message + '). You can type the ISBN instead.';
   }
