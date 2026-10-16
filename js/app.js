@@ -387,4 +387,19 @@ Store.onChange(render);
 Sync.start();
 seedStarterBooks();
 
+// Install as an app
+let installEvt = null;
+const installBtn = document.getElementById('btn-install');
+const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+if (!standalone) installBtn.hidden = false;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
+window.addEventListener('appinstalled', () => { installBtn.hidden = true; });
+installBtn.addEventListener('click', async () => {
+  if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; return; }
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  alert(ios
+    ? 'To install: tap the Share button in Safari, then "Add to Home Screen".'
+    : 'To install: open the browser menu (⋮) and tap "Install app" or "Add to Home screen". If you do not see it, open this page in Chrome.');
+});
+
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
