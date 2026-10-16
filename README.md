@@ -14,6 +14,7 @@ A catalogue of all the books in our house.
 A static web app (no build step). Open it on your phone, then:
 
 - **Scan** opens the camera and reads the ISBN barcode (native `BarcodeDetector`, with ZXing as a fallback). Details come from Open Library, then Google Books. You can also type an ISBN.
+- **Works offline and installs to the home screen** (open the site, then use the browser menu: Add to Home Screen). Looking up a new ISBN still needs internet.
 - **Add by hand** for books with no ISBN.
 - **Shelf/room, reading status (unread/reading/read) and "lent to"**, with filters for each (including a "Lent out" filter).
 - **Library / Wishlist** tabs, search, and a "Got it" button that moves a wishlist book into the library.
