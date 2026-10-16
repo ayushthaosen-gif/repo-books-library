@@ -147,6 +147,31 @@ $('#scan-close').onclick = stopScan;
 sdlg.addEventListener('close', () => Scanner.stop());
 $('#isbn-go').onclick = () => handleIsbn($('#isbn-manual').value);
 
+// ---- fill missing details ----
+$('#btn-fill').onclick = async () => {
+  const btn = $('#btn-fill');
+  const todo = Store.all().filter(b => !b.isbn && (!b.author || !b.cover));
+  if (!todo.length) return alert('Nothing to fill in: every book without an ISBN already has an author and a cover.');
+  if (!navigator.onLine) return alert('You are offline. Try again when connected.');
+  const filled = [], notFound = [];
+  let failed = 0;
+  for (let i = 0; i < todo.length; i++) {
+    btn.textContent = `Filling ${i + 1} of ${todo.length}…`;
+    const b = todo[i];
+    try {
+      const r = await Lookup.byTitle(b.title, b.author);
+      const patch = {};
+      if (r && !b.author && r.author) patch.author = r.author;
+      if (r && !b.cover && r.cover) patch.cover = r.cover;
+      if (Object.keys(patch).length) { Store.upsert({ id: b.id, ...patch }); filled.push(b.title + (patch.author ? ' (author: ' + patch.author + ')' : '')); }
+      else notFound.push(b.title);
+    } catch (e) { failed++; notFound.push(b.title); }
+  }
+  btn.textContent = 'Fill missing details';
+  alert(`Updated ${filled.length} of ${todo.length} books.\n\n` + (filled.length ? 'Check these:\n' + filled.join('\n') + '\n\n' : '') +
+    (notFound.length ? `No confident match for ${notFound.length}${failed ? ' (some lookups failed, try again)' : ''}. Edit those by hand, or scan their barcode.` : ''));
+};
+
 // ---- backup ----
 $('#btn-export').onclick = () => {
   const a = Object.assign(document.createElement('a'), {

@@ -82,5 +82,21 @@ const Lookup = (() => {
       }
     }).catch(e => { if (e) throw e; return null; });
   }
-  return { byIsbn };
+
+  const norm = s => (s || '').toLowerCase().replace(/&/g, ' and ').replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+  // Fill-in for books with no ISBN: look the book up by title (and author when known).
+  // Only an exact title match is trusted. Returns {author, cover} (either may be empty) or null.
+  async function byTitle(title, author) {
+    const q = new URLSearchParams({ title: title.split(':')[0], limit: '8', fields: 'title,author_name,cover_i' });
+    if (author) q.set('author', author.split(',')[0]);
+    const docs = (await getJson('https://openlibrary.org/search.json?' + q)).docs || [];
+    const want = norm(title.split(':')[0]);
+    const hit = docs.find(d => norm(d.title) === want && (d.author_name || d.cover_i));
+    if (!hit) return null;
+    return {
+      author: (hit.author_name || []).slice(0, 2).join(', '),
+      cover: hit.cover_i ? `https://covers.openlibrary.org/b/id/${hit.cover_i}-M.jpg` : '',
+    };
+  }
+  return { byIsbn, byTitle };
 })();
