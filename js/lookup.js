@@ -194,5 +194,22 @@ const Lookup = (() => {
       desc: p.extract || '',
     }));
   }
-  return { byIsbn, byTitle, details, searchTitle, byBarcode, searchGame };
+  // Games: best-effort cover picture. Tries the exact Wikipedia article (with common game suffixes),
+  // then a Wikipedia search, then the product-barcode photo.
+  async function gameCover(title, barcode) {
+    const thumb = async names => {
+      const q = new URLSearchParams({ action: 'query', format: 'json', origin: '*', redirects: '1', titles: names.join('|'), prop: 'pageimages', piprop: 'thumbnail', pithumbsize: '300' });
+      const pages = Object.values(((await getJson('https://en.wikipedia.org/w/api.php?' + q)).query || {}).pages || {});
+      const p = pages.find(p => p.thumbnail);
+      return p ? p.thumbnail.source : '';
+    };
+    const base = title.split(':')[0].trim();
+    for (const names of [[base + ' (board game)', base + ' (game)', base + ' (card game)', base + ' (tabletop game)', base]]) {
+      try { const c = await thumb(names); if (c) return c; } catch (e) {}
+    }
+    try { const r = (await searchGame(base)).find(r => r.cover); if (r) return r.cover; } catch (e) {}
+    if (/^\d{8,14}$/.test(barcode || '')) { try { const r = await byBarcode(barcode); if (r && r.cover) return r.cover; } catch (e) {} }
+    return '';
+  }
+  return { byIsbn, byTitle, details, searchTitle, byBarcode, searchGame, gameCover };
 })();

@@ -385,7 +385,7 @@ function genericCover(b) {
 const sameTitle = (a, b) => { const n = s => (s || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim(); return n(a.split(':')[0]) === n(b.split(':')[0]); };
 async function findCover(b) {
   const tries = b.kind === 'game'
-    ? [async () => ((await Lookup.searchGame(b.title)).find(r => r.cover && sameTitle(r.title, b.title)) || {}).cover]
+    ? [async () => Lookup.gameCover(b.title, b.isbn)]
     : [
       async () => b.isbn && (await Lookup.byIsbn(b.isbn)).cover,
       async () => (await Lookup.byTitle(b.title, b.author) || {}).cover,
