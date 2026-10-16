@@ -357,33 +357,6 @@ $('#btn-csv').onclick = () => {
 };
 
 // ---- covers ----
-// A generated cover (title and author on a coloured, bordered page) for items with no picture.
-function genericCover(b) {
-  const title = (b.title || 'Untitled').trim(), author = (b.author || '').trim();
-  let h = 0;
-  for (const c of title) h = (h * 31 + c.charCodeAt(0)) % 360;
-  const esc = t => t.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const wrap = (text, width, max) => {
-    const lines = [];
-    let line = '';
-    for (const w of text.split(/\s+/)) {
-      if (line && (line + ' ' + w).length > width) { lines.push(line); line = w; } else line = line ? line + ' ' + w : w;
-    }
-    if (line) lines.push(line);
-    if (lines.length > max) { lines.length = max; lines[max - 1] = lines[max - 1].replace(/.{0,2}$/, '') + '…'; }
-    return lines;
-  };
-  const size = title.length > 40 ? 17 : title.length > 22 ? 21 : 26;
-  const tl = wrap(title, Math.floor(160 / (size * 0.58)), 6);
-  const al = wrap(author, 20, 2);
-  const y0 = 120 - (tl.length - 1) * size * 0.6;
-  const t = tl.map((l, i) => `<text x="100" y="${(y0 + i * size * 1.2).toFixed(1)}" text-anchor="middle" font-family="Georgia,'Times New Roman',serif" font-weight="bold" font-size="${size}" fill="#fff">${esc(l)}</text>`).join('');
-  const a = al.map((l, i) => `<text x="100" y="${(262 + i * 16).toFixed(1)}" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#ffffffcc">${esc(l)}</text>`).join('');
-  const kind = b.kind === 'game' ? 'GAME' : 'BOOK';
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 300"><rect width="200" height="300" fill="hsl(${h} 38% 30%)"/><rect x="10" y="10" width="180" height="280" fill="none" stroke="#ffffff66" stroke-width="1.5"/><rect x="0" y="0" width="14" height="300" fill="hsl(${h} 38% 22%)"/><text x="107" y="42" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" letter-spacing="4" fill="#ffffff99">${kind}</text>${t}<line x1="70" y1="238" x2="140" y2="238" stroke="#ffffff88"/>${a}</svg>`;
-  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-}
-
 const sameTitle = (a, b) => { const n = s => (s || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim(); return n(a.split(':')[0]) === n(b.split(':')[0]); };
 async function findCover(b) {
   const tries = b.kind === 'game'
@@ -540,6 +513,53 @@ sform.onsubmit = async e => {
 $('#sync-close').onclick = () => sydlg.close();
 $('#sync-now').onclick = () => Sync.now();
 $('#sync-out').onclick = () => { Sync.signOut(); showSyncState(); };
+
+// ---- share (read-only link) ----
+const shdlg = $('#share-dialog');
+const shareUrl = t => new URL('view.html', location.href).href + '#' + t;
+function shareMsg(t) { $('#share-msg').hidden = !t; $('#share-msg').textContent = t || ''; }
+function shareShow(token) {
+  $('#share-on').hidden = !token;
+  $('#share-start').hidden = !!token;
+  if (token) $('#share-link').value = shareUrl(token);
+  $('#share-send').hidden = !navigator.share;
+}
+$('#btn-share').onclick = async () => {
+  shareMsg(''); shareShow(null); $('#share-start').hidden = true;
+  shdlg.showModal();
+  if (!Sync.configured()) return shareMsg('Sharing needs cloud sync. Turn on sync first (tap the sync line at the bottom), then come back here.');
+  try {
+    const rows = await Sync.api('shares?select=token');
+    shareShow(rows[0] && rows[0].token);
+  } catch (e) {
+    shareMsg(/404|42P01|shares/.test(e.message) ? 'Sharing is not set up in your Supabase project yet. Run step 4 of docs/SYNC.md once, then try again.' : e.message);
+  }
+};
+$('#share-start').onclick = async () => {
+  shareMsg('');
+  try {
+    const bytes = crypto.getRandomValues(new Uint8Array(24));
+    const token = Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
+    await Sync.now();
+    await Sync.api('shares?on_conflict=user_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ token }) });
+    shareShow(token);
+  } catch (e) { shareMsg(e.message); }
+};
+$('#share-copy').onclick = async () => {
+  const input = $('#share-link');
+  try { await navigator.clipboard.writeText(input.value); $('#share-copy').textContent = 'Copied'; }
+  catch (e) { input.select(); }
+  setTimeout(() => { $('#share-copy').textContent = 'Copy link'; }, 1500);
+};
+$('#share-send').onclick = () => navigator.share({ title: 'My library', url: $('#share-link').value }).catch(() => {});
+$('#share-stop').onclick = async () => {
+  if (!confirm('Stop sharing? The current link will stop working.')) return;
+  try {
+    await Sync.api('shares?user_id=not.is.null', { method: 'DELETE' });
+    shareShow(null); $('#share-start').hidden = false;
+  } catch (e) { shareMsg(e.message); }
+};
+$('#share-close').onclick = () => shdlg.close();
 
 render();
 Store.onChange(render);

@@ -1,6 +1,6 @@
 // Offline app shell: cache-first for our own files, network for everything else.
-const CACHE = 'books-library-v23';
-const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'config.js', 'js/store.js', 'js/sync.js', 'js/lookup.js', 'js/scanner.js', 'js/app.js', 'vendor/zxing.min.js', 'icons/icon-192.png', 'icons/icon-512.png', 'seed-books.json'];
+const CACHE = 'books-library-v24';
+const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'config.js', 'view.html', 'js/view.js', 'js/cover.js', 'js/store.js', 'js/sync.js', 'js/lookup.js', 'js/scanner.js', 'js/app.js', 'vendor/zxing.min.js', 'icons/icon-192.png', 'icons/icon-512.png', 'seed-books.json'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
