@@ -17,6 +17,7 @@
   <nav>
     <button data-tab="library" class="active">Library <span id="count-library">0</span></button>
     <button data-tab="wishlist">Wishlist <span id="count-wishlist">0</span></button>
+    <button data-tab="games">Games <span id="count-games">0</span></button>
   </nav>
   <input id="search" type="search" placeholder="Search title, author, shelf, notes">
   <div class="filters">
@@ -110,17 +111,19 @@
     <h2 id="edit-title">Add a book</h2>
     <img id="edit-cover" alt="" hidden>
     <label>Title <input name="title" required></label>
-    <button type="button" id="find-btn" class="secondary">Find details by title</button>
+    <button type="button" id="find-btn" data-book class="secondary">Find details by title</button>
     <ul id="find-results" class="find" hidden></ul>
-    <label>Author <input name="author"></label>
-    <label>ISBN (optional) <input name="isbn" inputmode="numeric"></label>
+    <label><span id="lbl-author">Author</span> <input name="author"></label>
+    <label data-book>ISBN (optional) <input name="isbn" inputmode="numeric"></label>
+    <label data-game hidden>Players <input name="players" placeholder="e.g. 2-4"></label>
+    <label data-game hidden>Play time <input name="playtime" placeholder="e.g. 45 min"></label>
     <label>Cover image URL (optional) <input name="cover" type="url"></label>
     <label>Shelf / room <input name="room" list="rooms" placeholder="e.g. Living room, shelf 2"></label>
     <datalist id="rooms"></datalist>
-    <label>Reading status
+    <label data-book>Reading status
       <select name="status"><option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option></select>
     </label>
-    <label>Current page (while reading) <input name="page" type="number" min="0" inputmode="numeric"></label>
+    <label data-book>Current page (while reading) <input name="page" type="number" min="0" inputmode="numeric"></label>
     <label>My rating
       <select name="rating"><option value="">Not rated</option><option value="1">1 star</option><option value="2">2 stars</option><option value="3">3 stars</option><option value="4">4 stars</option><option value="5">5 stars</option></select>
     </label>

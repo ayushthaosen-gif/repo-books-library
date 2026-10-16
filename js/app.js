@@ -16,12 +16,19 @@ function render() {
   const q = $('#search').value.trim().toLowerCase();
   const room = $('#f-room').value, status = $('#f-status').value, lentOnly = $('#f-lent').checked;
   const all = Store.all();
-  $('#count-library').textContent = all.filter(b => b.list === 'library').length;
-  $('#count-wishlist').textContent = all.filter(b => b.list === 'wishlist').length;
-  const items = all.filter(b => b.list === tab &&
+  const isGame = b => b.kind === 'game';
+  $('#count-library').textContent = all.filter(b => !isGame(b) && b.list === 'library').length;
+  $('#count-wishlist').textContent = all.filter(b => !isGame(b) && b.list === 'wishlist').length;
+  $('#count-games').textContent = all.filter(isGame).length;
+  const games = tab === 'games';
+  $('#f-status').hidden = games;
+  $('#btn-scan').hidden = games;
+  $('#btn-add').textContent = games ? 'Add a game' : 'Add by hand';
+  $('#btn-add').className = games ? '' : 'secondary';
+  const items = all.filter(b => (games ? isGame(b) : !isGame(b) && b.list === tab) &&
     (!q || [b.title, b.author, b.room, b.notes, b.isbn, b.lentTo].some(f => (f || '').toLowerCase().includes(q))) &&
     (!room || b.room === room) &&
-    (!status || (b.status || 'unread') === status) &&
+    (games || !status || (b.status || 'unread') === status) &&
     (!lentOnly || b.lentTo));
   const sort = $('#f-sort').value;
   const byText = f => (x, y) => (x[f] || '\uffff').localeCompare(y[f] || '\uffff', undefined, { sensitivity: 'base' });
@@ -41,7 +48,11 @@ function render() {
     }
     const badges = document.createElement('div');
     badges.className = 'badges';
-    if (tab === 'library') {
+    if (tab === 'games') {
+      for (const t of [b.players && b.players + ' players', b.playtime]) if (t) badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: t }));
+      if (b.list === 'wishlist') badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: 'Wishlist' }));
+      if (b.lentTo) badges.append(Object.assign(document.createElement('span'), { className: 'badge lent', textContent: 'Lent to ' + b.lentTo }));
+    } else if (tab === 'library') {
       const st = b.status || 'unread';
       badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + st, textContent: STATUS_LABEL[st] }));
       if (b.lentTo) badges.append(Object.assign(document.createElement('span'), { className: 'badge lent', textContent: 'Lent to ' + b.lentTo }));
@@ -61,7 +72,9 @@ function render() {
   }
   const empty = $('#empty');
   empty.hidden = items.length > 0;
-  empty.textContent = q ? 'No matches.' : tab === 'library'
+  empty.textContent = q ? 'No matches.' : tab === 'games'
+    ? 'No games yet. Tap Add a game to list your board games, card games and puzzles.'
+    : tab === 'library'
     ? 'No books yet. Tap Scan and point the camera at the barcode on the back of a book, or tap Add by hand for books without one.'
     : 'Your wishlist is empty. Scan or add a book you want and choose Wishlist.';
 }
@@ -108,7 +121,8 @@ async function openDetail(b) {
   const badges = $('#d-badges');
   badges.replaceChildren();
   const badge = (cls, text) => badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + cls, textContent: text }));
-  if (b.list === 'wishlist') badge('', 'Wishlist');
+  if (b.kind === 'game') { if (b.players) badge('', b.players + ' players'); if (b.playtime) badge('', b.playtime); if (b.list === 'wishlist') badge('', 'Wishlist'); }
+  else if (b.list === 'wishlist') badge('', 'Wishlist');
   else { const st = b.status || 'unread'; badge(st, STATUS_LABEL[st]); }
   if (b.room) badge('', b.room);
   if (b.lentTo) badge('lent', 'Lent to ' + b.lentTo);
@@ -128,6 +142,15 @@ async function openDetail(b) {
   if (b.lentTo) row('Lent', `to ${b.lentTo}` + (b.lentSince ? ` since ${new Date(b.lentSince).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''));
   if (b.notes) row('Notes', b.notes);
   $('#d-move').hidden = b.list !== 'wishlist';
+  if (b.kind === 'game') {
+    $('#d-cover').hidden = !b.cover;
+    if (b.cover) $('#d-cover').src = b.cover;
+    $('#d-rating').hidden = true; $('#d-meta').textContent = '';
+    $('#d-desc').textContent = b.notes ? '' : 'Tap Edit to add notes, player count or play time.';
+    $('#d-links').replaceChildren(Object.assign(document.createElement('a'), { href: 'https://boardgamegeek.com/geeksearch.php?action=search&objecttype=boardgame&q=' + encodeURIComponent(b.title), textContent: 'Look up on BoardGameGeek', target: '_blank', rel: 'noopener' }));
+    if (!ddlg.open) ddlg.showModal();
+    return;
+  }
   const cached = readCache()[b.id];
   paintDetail(b, cached);
   if (!cached) $('#d-desc').textContent = 'Loading…';
@@ -147,22 +170,28 @@ $('#d-move').onclick = () => { Store.upsert({ id: detailBook.id, list: 'library'
 
 // ---- add / edit ----
 const dlg = $('#edit-dialog'), form = $('#edit-form');
-let editingId = null, fromScan = false;
+let editingId = null, fromScan = false, editingKind = 'book';
 
 function openEdit(b = {}, scanned = false) {
   fromScan = scanned;
   editingId = b.id || null;
-  $('#edit-title').textContent = b.id ? 'Edit book' : 'Add a book';
+  const game = b.kind === 'game' || (!b.id && tab === 'games');
+  editingKind = game ? 'game' : 'book';
+  $('#edit-title').textContent = (b.id ? 'Edit ' : 'Add a ') + (game ? 'game' : 'book');
+  $('#lbl-author').textContent = game ? 'Publisher or designer' : 'Author';
+  document.querySelectorAll('[data-book]').forEach(e => e.hidden = game);
+  document.querySelectorAll('[data-game]').forEach(e => e.hidden = !game);
+  for (const f of ['players', 'playtime']) form.elements[f].value = b[f] || '';
   for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
   form.elements.rating.value = b.rating || '';
   $('#find-results').hidden = true;
   form.elements.status.value = b.status || 'unread';
-  form.elements.list.value = b.list || tab;
+  form.elements.list.value = b.list || (tab === 'wishlist' ? 'wishlist' : 'library');
   $('#edit-cover').hidden = !b.cover;
   if (b.cover) $('#edit-cover').src = b.cover;
   $('#edit-delete').hidden = !b.id;
   const warn = $('#edit-warn');
-  const dup = b.isbn && Store.findByIsbn(b.isbn);
+  const dup = !game && b.isbn && Store.findByIsbn(b.isbn);
   warn.hidden = !(dup && dup.id !== b.id);
   if (!warn.hidden) warn.textContent = `Already in your ${dup.list}: "${dup.title}".`;
   dlg.showModal();
@@ -171,6 +200,7 @@ form.onsubmit = e => {
   e.preventDefault();
   const v = Object.fromEntries(new FormData(form));
   if (editingId) v.id = editingId;
+  v.kind = editingKind;
   v.rating = v.rating ? +v.rating : 0;
   v.page = v.page ? +v.page : 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -178,7 +208,7 @@ form.onsubmit = e => {
   else if (!v.lentSince) v.lentSince = today;
   Store.upsert(v);
   dlg.close();
-  tab = v.list;
+  tab = v.kind === 'game' ? 'games' : v.list;
   const again = fromScan && $('#keep-scanning').checked;
   fromScan = false;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
@@ -212,7 +242,7 @@ $('#find-btn').onclick = async () => {
   }
 };
 $('#edit-cancel').onclick = () => { const again = fromScan && $('#keep-scanning').checked; fromScan = false; dlg.close(); if (again) setTimeout(() => $('#btn-scan').click(), 150); };
-$('#edit-delete').onclick = () => { if (confirm('Delete this book?')) { Store.remove(editingId); dlg.close(); render(); } };
+$('#edit-delete').onclick = () => { if (confirm('Delete this ' + (editingKind === 'game' ? 'game' : 'book') + '?')) { Store.remove(editingId); dlg.close(); render(); } };
 $('#btn-add').onclick = () => openEdit({});
 
 // ---- scan ----
@@ -263,7 +293,7 @@ $('#isbn-go').onclick = () => handleIsbn($('#isbn-manual').value);
 
 // ---- CSV export ----
 $('#btn-csv').onclick = () => {
-  const cols = ['title', 'author', 'isbn', 'list', 'status', 'rating', 'review', 'page', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
+  const cols = ['kind', 'title', 'author', 'isbn', 'players', 'playtime', 'list', 'status', 'rating', 'review', 'page', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
   const esc = v => { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const csv = [cols.join(','), ...Store.all().map(b => cols.map(c => esc(b[c])).join(','))].join('\r\n');
   const a = Object.assign(document.createElement('a'), {
@@ -298,7 +328,7 @@ async function autoCovers() {
   let tried = {};
   try { tried = JSON.parse(localStorage.getItem('books-library-cover-tried') || '{}'); } catch (e) {}
   const today = new Date().toISOString().slice(0, 10);
-  const covers = async () => { for (const b of Store.all().filter(b => !b.cover && tried[b.id] !== today)) {
+  const covers = async () => { for (const b of Store.all().filter(b => b.kind !== 'game' && !b.cover && tried[b.id] !== today)) {
     tried[b.id] = today;
     try {
       const cover = await findCover(b);
@@ -306,12 +336,13 @@ async function autoCovers() {
     } catch (e) {}
   } };
   // Descriptions, public star ratings (and a last-resort cover) from Google Books
-  const dets = async () => { for (const b of Store.all().filter(b => !readCache()[b.id] && tried['d' + b.id] !== today)) {
+  const dets = async () => { for (const b of Store.all().filter(b => b.kind !== 'game' && !readCache()[b.id] && tried['d' + b.id] !== today)) {
     tried['d' + b.id] = today;
     try {
       const d = await Lookup.details(b);
       if (d) { writeCache(b.id, d); if (!b.cover && d.cover) Store.upsert({ id: b.id, cover: d.cover }); else render(); }
     } catch (e) {}
+    await new Promise(r => setTimeout(r, 800));
   } };
   await Promise.all([covers(), dets()]);
   try { localStorage.setItem('books-library-cover-tried', JSON.stringify(tried)); } catch (e) {}
@@ -321,7 +352,7 @@ setTimeout(autoCovers, 4000);
 // ---- fill missing details ----
 $('#btn-fill').onclick = async () => {
   const btn = $('#btn-fill');
-  const todo = Store.all().filter(b => !b.cover || (!b.isbn && !b.author));
+  const todo = Store.all().filter(b => b.kind !== 'game' && (!b.cover || (!b.isbn && !b.author)));
   if (!todo.length) return alert('Nothing to fill in: every book already has a cover.');
   if (!navigator.onLine) return alert('You are offline. Try again when connected.');
   const filled = [], notFound = [];

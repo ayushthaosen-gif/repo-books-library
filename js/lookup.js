@@ -100,7 +100,7 @@ const Lookup = (() => {
   }
 
   // Description, rating and extras for the detail page (Google Books). Returns null if nothing is known.
-  async function details(book) {
+  async function googleDetails(book) {
     const q = book.isbn ? 'isbn:' + book.isbn : 'intitle:' + book.title.split(':')[0] + (book.author ? '+inauthor:' + book.author.split(',')[0] : '');
     const items = (await getJson('https://www.googleapis.com/books/v1/volumes?maxResults=5&q=' + encodeURIComponent(q).replace(/%2B/g, '+'))).items || [];
     const want = norm(book.title.split(':')[0]);
@@ -119,6 +119,43 @@ const Lookup = (() => {
       cover: (img.thumbnail || img.smallThumbnail || '').replace('http://', 'https://'),
       link: i.infoLink || '',
     };
+  }
+
+  // Backup source for description/pages/publisher: Open Library search, then the work record.
+  async function openLibraryDetails(book) {
+    const q = new URLSearchParams({ limit: '5', fields: 'key,title,cover_i,number_of_pages_median,publisher,first_publish_year,subject' });
+    if (book.isbn) q.set('isbn', book.isbn); else { q.set('title', book.title.split(':')[0]); if (book.author) q.set('author', book.author.split(',')[0]); }
+    const docs = (await getJson('https://openlibrary.org/search.json?' + q)).docs || [];
+    const want = norm(book.title.split(':')[0]);
+    const hit = book.isbn ? docs[0] : docs.find(d => norm(d.title) === want);
+    if (!hit) return null;
+    let description = '';
+    try {
+      const w = await getJson(`https://openlibrary.org${hit.key}.json`);
+      description = typeof w.description === 'string' ? w.description : (w.description && w.description.value) || '';
+    } catch (e) {}
+    return {
+      description: description.split('\n----------')[0].trim(),
+      rating: 0, ratings: 0,
+      pages: hit.number_of_pages_median || 0,
+      publisher: (hit.publisher || [])[0] || '',
+      published: hit.first_publish_year ? String(hit.first_publish_year) : '',
+      categories: (hit.subject || []).slice(0, 3).join(', '),
+      cover: hit.cover_i ? `https://covers.openlibrary.org/b/id/${hit.cover_i}-M.jpg` : '',
+      link: 'https://openlibrary.org' + hit.key,
+    };
+  }
+
+  // Description, rating and extras: Google Books first, Open Library fills what is missing or covers for it when it fails.
+  async function details(book) {
+    let g = null, gErr = null;
+    try { g = await googleDetails(book); } catch (e) { gErr = e; }
+    if (g && g.description) return g;
+    let o = null;
+    try { o = await openLibraryDetails(book); } catch (e) { if (gErr) throw gErr; }
+    if (!g) return o;
+    if (!o) return g;
+    return { ...o, ...Object.fromEntries(Object.entries(g).filter(([, v]) => v)), description: o.description };
   }
 
   // Title search for the Add form: up to 8 candidates from Open Library and Google Books.
