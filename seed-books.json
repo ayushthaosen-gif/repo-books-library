@@ -1,4 +1,250 @@
 [
-  {"title": "India: Land of Dreams and Fantasy", "author": "Doranne Jacobson", "isbn": "9781597641548", "list": "library", "status": "unread"},
-  {"title": "The Magic of Mangalajodi: Inheritance, Ecology, Conservation", "author": "Avinash Khemka", "isbn": "9788195582303", "list": "library", "status": "unread"}
+ {
+  "title": "India: Land of Dreams and Fantasy",
+  "author": "Doranne Jacobson",
+  "isbn": "9781597641548",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-9781597641548"
+ },
+ {
+  "title": "The Magic of Mangalajodi: Inheritance, Ecology, Conservation",
+  "author": "Avinash Khemka",
+  "isbn": "9788195582303",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-9788195582303"
+ },
+ {
+  "title": "Moonwalking with Einstein",
+  "author": "Joshua Foer",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-moonwalking-with-einstein"
+ },
+ {
+  "title": "His Majesty's Opponent",
+  "author": "Sugata Bose",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-his-majesty-s-opponent"
+ },
+ {
+  "title": "Interpretation of Dreams",
+  "author": "",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-interpretation-of-dreams"
+ },
+ {
+  "title": "Oops! I Fell in Love Just by Chance",
+  "author": "Harsh Snehanshu",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-oops-i-fell-in-love-just-by-chance"
+ },
+ {
+  "title": "India's Vaccine Growth Story",
+  "author": "Sajjan Singh Yadav",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-india-s-vaccine-growth-story"
+ },
+ {
+  "title": "From Smart to Wise",
+  "author": "Prasad Kaipa, Navi Radjou",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-from-smart-to-wise"
+ },
+ {
+  "title": "O's Little Book of Love & Friendship",
+  "author": "The Editors of O, The Oprah Magazine",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-o-s-little-book-of-love-friendship"
+ },
+ {
+  "title": "Evading the Shadows",
+  "author": "Rajesh M. Iyer",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-evading-the-shadows"
+ },
+ {
+  "title": "Sailing on My Own Compass",
+  "author": "Mukund Kaushal",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-sailing-on-my-own-compass"
+ },
+ {
+  "title": "Gentleman Spymaster: R.N. Kao",
+  "author": "Nitin A. Gokhale",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-gentleman-spymaster-r-n-kao"
+ },
+ {
+  "title": "A Promised Land",
+  "author": "Barack Obama",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-a-promised-land"
+ },
+ {
+  "title": "John Grisham book (title unreadable)",
+  "author": "John Grisham",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-john-grisham-book-title-unreadable"
+ },
+ {
+  "title": "Kane and Abel",
+  "author": "Jeffrey Archer",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-kane-and-abel"
+ },
+ {
+  "title": "Highway to Swades",
+  "author": "Bhairavi Jani",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-highway-to-swades"
+ },
+ {
+  "title": "Globalisation and Development",
+  "author": "Sunanda Sen",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-globalisation-and-development"
+ },
+ {
+  "title": "India's Secret War",
+  "author": "Ushinor Majumdar",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-india-s-secret-war"
+ },
+ {
+  "title": "Silent Constitution: Dangerous Consequences",
+  "author": "Major Saras C Tripathi",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-silent-constitution-dangerous-consequenc"
+ },
+ {
+  "title": "The Matarese Circle",
+  "author": "Robert Ludlum",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-the-matarese-circle"
+ },
+ {
+  "title": "The Fellowship of the Ring",
+  "author": "J.R.R. Tolkien",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-the-fellowship-of-the-ring"
+ },
+ {
+  "title": "Foundation and Empire",
+  "author": "Isaac Asimov",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-foundation-and-empire"
+ },
+ {
+  "title": "615 Purvanchal Hostel (615 पूर्वांचल हॉस्टल)",
+  "author": "Raghvendra Singh",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-615-purvanchal-hostel-615"
+ },
+ {
+  "title": "The Palace of Illusions",
+  "author": "Chitra Banerjee Divakaruni",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-the-palace-of-illusions"
+ },
+ {
+  "title": "The Let Them Theory",
+  "author": "Mel Robbins",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-the-let-them-theory"
+ },
+ {
+  "title": "The Golden Road",
+  "author": "William Dalrymple",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-the-golden-road"
+ },
+ {
+  "title": "Superstar Advice on How to Be a Better Man",
+  "author": "",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-superstar-advice-on-how-to-be-a-better-m"
+ },
+ {
+  "title": "Sick Industrial Companies (Special Provisions) Act, 1985 with BIFR Regulations & Allied Rules",
+  "author": "",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-sick-industrial-companies-special-provis"
+ },
+ {
+  "title": "Sashastra Seema Bal Act, 2007 with Rules, 2009",
+  "author": "",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-sashastra-seema-bal-act-2007-with-rules-"
+ },
+ {
+  "title": "The Scheduled Castes and Scheduled Tribes (Prevention of Atrocities) Act & Rules",
+  "author": "",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-the-scheduled-castes-and-scheduled-tribe"
+ },
+ {
+  "title": "Left Wing Extremism: Assessment & Counter-Insurgency Strategy",
+  "author": "",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-left-wing-extremism-assessment-counter-i"
+ }
 ]

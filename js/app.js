@@ -171,11 +171,13 @@ async function seedStarterBooks() {
     let added = 0;
     // With sync on, wait for the first pull so another device's copy (or delete) is respected.
     if (Sync.configured() && !Sync.hasPulled()) return;
+    const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     for (const b of books) {
-      if (seeded.includes(b.isbn)) continue;
-      seeded.push(b.isbn);
-      const id = 'seed-' + b.isbn;
-      if (!Store.getIncludingDeleted(id) && !Store.findByIsbn(b.isbn)) { Store.upsert({ ...b, id }); added++; }
+      const id = b.seedId || 'seed-' + b.isbn;
+      if (seeded.includes(id) || (b.isbn && seeded.includes(b.isbn))) continue;
+      seeded.push(id);
+      const dup = Store.all().some(x => (b.isbn && x.isbn === b.isbn) || norm(x.title) === norm(b.title));
+      if (!Store.getIncludingDeleted(id) && !dup) { Store.upsert({ ...b, id, seedId: undefined }); added++; }
     }
     localStorage.setItem('books-library-seeded', JSON.stringify(seeded));
     if (added) render();
