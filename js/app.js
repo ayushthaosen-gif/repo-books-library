@@ -60,8 +60,6 @@ document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   tab = btn.dataset.tab;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b === btn));
   render();
-
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 });
 $('#search').oninput = render;
 ['#f-room', '#f-status', '#f-lent'].forEach(s => $(s).onchange = render);
@@ -94,8 +92,6 @@ form.onsubmit = e => {
   tab = v.list;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   render();
-
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 };
 $('#edit-cancel').onclick = () => dlg.close();
 $('#edit-delete').onclick = () => { if (confirm('Delete this book?')) { Store.remove(editingId); dlg.close(); render(); } };
@@ -189,13 +185,14 @@ $('#file-import').onchange = async e => {
 };
 
 // Starter books: added once per ISBN (so deleting one later does not bring it back).
+let syncTried = false;
 async function seedStarterBooks() {
   try {
     const seeded = JSON.parse(localStorage.getItem('books-library-seeded') || '[]');
     const books = await (await fetch('seed-books.json')).json();
     let added = 0;
-    // With sync on, wait for the first pull so another device's copy (or delete) is respected.
-    if (Sync.configured() && !Sync.hasPulled()) return;
+    // With sync on, wait for the first sync attempt so another device's copy (or delete) is respected; if sync fails, add locally anyway.
+    if (Sync.configured() && !Sync.hasPulled() && !syncTried) return;
     const norm = s => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     for (const b of books) {
       const id = b.seedId || 'seed-' + b.isbn;
@@ -229,7 +226,7 @@ Sync.onStatus(({ state, msg }) => {
   const m = $('#sync-msg');
   m.hidden = state !== 'error' || !sydlg.open;
   m.textContent = msg;
-  if (state === 'ok') seedStarterBooks();
+  if (state === 'ok' || state === 'error') { syncTried = true; seedStarterBooks(); }
 });
 $('#btn-sync').onclick = () => {
   const s = Sync.settings();
@@ -262,4 +259,4 @@ Store.onChange(render);
 Sync.start();
 seedStarterBooks();
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => r.update()).catch(() => {});
