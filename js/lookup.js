@@ -175,5 +175,24 @@ const Lookup = (() => {
     }
     return out.slice(0, 8);
   }
-  return { byIsbn, byTitle, details, searchTitle };
+  // Games: product barcode -> name (UPCitemdb free tier, limited per day). Returns {title, author (brand), cover} or null.
+  async function byBarcode(code) {
+    const j = await getJson('https://api.upcitemdb.com/prod/trial/lookup?upc=' + code);
+    const i = (j.items || [])[0];
+    if (!i || !i.title) return null;
+    return { title: i.title, author: i.brand || '', cover: (i.images || []).find(u => /^https:/.test(u)) || '' };
+  }
+
+  // Games: search by name using Wikipedia (title, thumbnail, first sentences).
+  async function searchGame(text) {
+    const q = new URLSearchParams({ action: 'query', format: 'json', origin: '*', generator: 'search', gsrsearch: text + ' game', gsrlimit: '8', prop: 'pageimages|extracts', piprop: 'thumbnail', pithumbsize: '300', exintro: '1', explaintext: '1', exsentences: '3' });
+    const pages = Object.values(((await getJson('https://en.wikipedia.org/w/api.php?' + q)).query || {}).pages || {}).sort((a, b) => a.index - b.index);
+    return pages.filter(p => /game|puzzle|cards?\b/i.test(p.extract || p.title)).map(p => ({
+      title: p.title.replace(/\s*\((board |card |tabletop |dice )?game\)$/i, ''),
+      author: '', isbn: '',
+      cover: p.thumbnail ? p.thumbnail.source : '',
+      desc: p.extract || '',
+    }));
+  }
+  return { byIsbn, byTitle, details, searchTitle, byBarcode, searchGame };
 })();
