@@ -1,5 +1,5 @@
 // Offline app shell: cache-first for our own files, network for everything else.
-const CACHE = 'books-library-v7';
+const CACHE = 'books-library-v8';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'config.js', 'js/store.js', 'js/sync.js', 'js/lookup.js', 'js/scanner.js', 'js/app.js', 'vendor/zxing.min.js', 'icons/icon-192.png', 'icons/icon-512.png', 'seed-books.json'];
 
 self.addEventListener('install', e => {
@@ -11,10 +11,16 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== location.origin) return;
-  // Stale-while-revalidate so updates arrive on the next open.
+  // Network first so a new version shows up on the next open; the cache is the offline fallback.
   e.respondWith(caches.open(CACHE).then(async c => {
-    const hit = await c.match(e.request, { ignoreSearch: true });
-    const net = fetch(e.request).then(r => { if (r.ok) c.put(e.request, r.clone()); return r; }).catch(() => hit);
-    return hit || net;
+    try {
+      const r = await fetch(e.request, { cache: 'no-cache' });
+      if (r.ok) c.put(e.request, r.clone());
+      return r;
+    } catch (err) {
+      const hit = await c.match(e.request, { ignoreSearch: true });
+      if (hit) return hit;
+      throw err;
+    }
   }));
 });
