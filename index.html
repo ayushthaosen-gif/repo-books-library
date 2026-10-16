@@ -39,6 +39,7 @@
 </div>
 
 <footer>
+  <button id="btn-sync" class="link"><span id="sync-dot">&#9679;</span> <span id="sync-text">Sync is off</span></button>
   <button id="btn-export" class="link">Export backup</button>
   <label class="link">Import backup<input id="file-import" type="file" accept="application/json" hidden></label>
 </footer>
@@ -55,6 +56,26 @@
   <label class="row"><input type="radio" name="scan-target" value="library" checked> Add to Library</label>
   <label class="row"><input type="radio" name="scan-target" value="wishlist"> Add to Wishlist</label>
   <button type="button" id="scan-close" class="secondary">Close</button>
+</dialog>
+
+<dialog id="sync-dialog">
+  <form id="sync-form">
+    <h2>Keep my library safe</h2>
+    <p class="hint">Syncs your books to your own free Supabase project, so they survive a lost phone and show on every device. Setup steps are in <a href="https://github.com/ayushthaosen-gif/repo-books-library/blob/main/docs/SYNC.md" target="_blank" rel="noopener">docs/SYNC.md</a>.</p>
+    <label>Project URL <input name="url" type="url" placeholder="https://xxxx.supabase.co" required></label>
+    <label>Anon (public) key <input name="key" required autocomplete="off"></label>
+    <label>Email <input name="email" type="email" required autocomplete="username"></label>
+    <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+    <p id="sync-msg" class="warn" hidden></p>
+    <div class="row">
+      <button type="submit" id="sync-signin">Sign in and sync</button>
+      <button type="button" id="sync-close" class="secondary">Close</button>
+    </div>
+    <div class="row">
+      <button type="button" id="sync-now" class="secondary" hidden>Sync now</button>
+      <button type="button" id="sync-out" class="danger" hidden>Turn off sync</button>
+    </div>
+  </form>
 </dialog>
 
 <dialog id="edit-dialog">
@@ -85,7 +106,9 @@
 </dialog>
 
 <script src="vendor/zxing.min.js"></script>
+<script src="config.js"></script>
 <script src="js/store.js"></script>
+<script src="js/sync.js"></script>
 <script src="js/lookup.js"></script>
 <script src="js/scanner.js"></script>
 <script src="js/app.js"></script>

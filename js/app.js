@@ -169,17 +169,63 @@ async function seedStarterBooks() {
     const seeded = JSON.parse(localStorage.getItem('books-library-seeded') || '[]');
     const books = await (await fetch('seed-books.json')).json();
     let added = 0;
+    // With sync on, wait for the first pull so another device's copy (or delete) is respected.
+    if (Sync.configured() && !Sync.hasPulled()) return;
     for (const b of books) {
       if (seeded.includes(b.isbn)) continue;
       seeded.push(b.isbn);
-      if (!Store.findByIsbn(b.isbn)) { Store.upsert(b); added++; }
+      const id = 'seed-' + b.isbn;
+      if (!Store.getIncludingDeleted(id) && !Store.findByIsbn(b.isbn)) { Store.upsert({ ...b, id }); added++; }
     }
     localStorage.setItem('books-library-seeded', JSON.stringify(seeded));
     if (added) render();
   } catch (e) {}
 }
 
+// ---- sync ----
+const sydlg = $('#sync-dialog'), sform = $('#sync-form');
+function showSyncState() {
+  const on = Sync.configured();
+  $('#sync-now').hidden = $('#sync-out').hidden = !on;
+  $('#sync-signin').textContent = on ? 'Sign in again' : 'Sign in and sync';
+}
+Sync.onStatus(({ state, msg }) => {
+  $('#sync-text').textContent = msg;
+  $('#btn-sync').className = 'link sync-' + state;
+  const m = $('#sync-msg');
+  m.hidden = state !== 'error' || !sydlg.open;
+  m.textContent = msg;
+  if (state === 'ok') seedStarterBooks();
+});
+$('#btn-sync').onclick = () => {
+  const s = Sync.settings();
+  for (const f of ['url', 'key', 'email']) sform.elements[f].value = s[f];
+  sform.elements.password.value = '';
+  $('#sync-msg').hidden = true;
+  showSyncState();
+  sydlg.showModal();
+};
+sform.onsubmit = async e => {
+  e.preventDefault();
+  const v = sform.elements;
+  $('#sync-msg').hidden = true;
+  try {
+    await Sync.signIn(v.url.value, v.key.value, v.email.value, v.password.value);
+    v.password.value = '';
+    showSyncState();
+    sydlg.close();
+  } catch (err) {
+    $('#sync-msg').hidden = false;
+    $('#sync-msg').textContent = err.message;
+  }
+};
+$('#sync-close').onclick = () => sydlg.close();
+$('#sync-now').onclick = () => Sync.now();
+$('#sync-out').onclick = () => { Sync.signOut(); showSyncState(); };
+
 render();
+Store.onChange(render);
+Sync.start();
 seedStarterBooks();
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
