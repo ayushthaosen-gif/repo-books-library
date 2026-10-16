@@ -312,6 +312,7 @@ async function autoCovers() {
       const d = await Lookup.details(b);
       if (d) { writeCache(b.id, d); if (!b.cover && d.cover) Store.upsert({ id: b.id, cover: d.cover }); else render(); }
     } catch (e) {}
+    await new Promise(r => setTimeout(r, 800));
   } };
   await Promise.all([covers(), dets()]);
   try { localStorage.setItem('books-library-cover-tried', JSON.stringify(tried)); } catch (e) {}
