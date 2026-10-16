@@ -1,5 +1,9 @@
 const $ = s => document.querySelector(s);
 let tab = 'library';
+let fillBusy = false;
+
+// Picture shown for an item: your own photo first, then the looked-up cover.
+const pic = b => b.photo || b.cover || '';
 
 const STATUS_LABEL = { unread: 'Unread', reading: 'Reading', read: 'Read' };
 
@@ -13,6 +17,7 @@ function refreshRooms() {
 
 function render() {
   refreshRooms();
+  if (typeof paintFillLabel === 'function' && !fillBusy) paintFillLabel();
   const q = $('#search').value.trim().toLowerCase();
   const room = $('#f-room').value, status = $('#f-status').value, lentOnly = $('#f-lent').checked;
   const all = Store.all();
@@ -38,8 +43,8 @@ function render() {
   ul.replaceChildren();
   for (const b of items) {
     const li = document.createElement('li');
-    const cover = b.cover ? Object.assign(document.createElement('img'), { src: b.cover, alt: '', loading: 'lazy' }) : placeholder(b);
-    if (b.cover) cover.onerror = () => cover.replaceWith(placeholder(b));
+    const cover = pic(b) ? Object.assign(document.createElement('img'), { src: pic(b), alt: '', loading: 'lazy' }) : placeholder(b);
+    if (pic(b)) cover.onerror = () => cover.replaceWith(placeholder(b));
     const info = document.createElement('div');
     for (const [cls, text] of [['t', b.title], ['a', b.author], ['abs', ((readCache()[b.id] || {}).description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()], ['n', [b.room, b.notes].filter(Boolean).join(' · ')]]) {
       if (!text) continue;
@@ -97,7 +102,7 @@ let detailBook = null;
 $('#d-cover').onerror = () => { $('#d-cover').hidden = true; };
 
 function paintDetail(b, d) {
-  const cover = b.cover || (d && d.cover);
+  const cover = pic(b) || (d && d.cover);
   $('#d-cover').hidden = !cover;
   if (cover) $('#d-cover').src = cover;
   const rt = $('#d-rating');
@@ -142,8 +147,8 @@ async function openDetail(b) {
   if (b.notes) row('Notes', b.notes);
   $('#d-move').hidden = b.list !== 'wishlist';
   if (b.kind === 'game') {
-    $('#d-cover').hidden = !b.cover;
-    if (b.cover) $('#d-cover').src = b.cover;
+    $('#d-cover').hidden = !pic(b);
+    if (pic(b)) $('#d-cover').src = pic(b);
     $('#d-rating').hidden = true; $('#d-meta').textContent = '';
     $('#d-desc').textContent = b.desc || (b.notes ? '' : 'Tap Edit to add notes, player count or play time.');
     $('#d-links').replaceChildren(Object.assign(document.createElement('a'), { href: 'https://boardgamegeek.com/geeksearch.php?action=search&objecttype=boardgame&q=' + encodeURIComponent(b.title), textContent: 'Look up on BoardGameGeek', target: '_blank', rel: 'noopener' }));
@@ -171,6 +176,38 @@ $('#d-move').onclick = () => { Store.upsert({ id: detailBook.id, list: 'library'
 const dlg = $('#edit-dialog'), form = $('#edit-form');
 let editingId = null, fromScan = false, editingKind = 'book';
 
+function paintEditPic() {
+  const src = form.elements.photo.value || form.elements.cover.value;
+  $('#edit-cover').hidden = !src;
+  if (src) $('#edit-cover').src = src;
+  $('#photo-remove').hidden = !form.elements.photo.value;
+}
+// Shrinks a picture to a small JPEG so it stays light on the phone and in sync.
+function shrink(file, max = 420) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.72));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that picture.')); };
+    img.src = url;
+  });
+}
+$('#photo-btn').onclick = () => $('#photo-file').click();
+$('#photo-file').onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try { form.elements.photo.value = await shrink(f); paintEditPic(); }
+  catch (err) { alert(err.message); }
+};
+$('#photo-remove').onclick = () => { form.elements.photo.value = ''; paintEditPic(); };
+
 function openEdit(b = {}, scanned = false) {
   fromScan = scanned;
   editingId = b.id || null;
@@ -181,13 +218,12 @@ function openEdit(b = {}, scanned = false) {
   document.querySelectorAll('[data-book]').forEach(e => e.hidden = game);
   document.querySelectorAll('[data-game]').forEach(e => e.hidden = !game);
   for (const f of ['players', 'playtime', 'desc']) form.elements[f].value = b[f] || '';
-  for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
+  for (const f of ['title', 'author', 'isbn', 'cover', 'photo', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
   form.elements.rating.value = b.rating || '';
   $('#find-results').hidden = true;
   form.elements.status.value = b.status || 'unread';
   form.elements.list.value = b.list || (tab === 'wishlist' ? 'wishlist' : 'library');
-  $('#edit-cover').hidden = !b.cover;
-  if (b.cover) $('#edit-cover').src = b.cover;
+  paintEditPic();
   $('#edit-delete').hidden = !b.id;
   const warn = $('#edit-warn');
   const dup = !game && b.isbn && Store.findByIsbn(b.isbn);
@@ -233,7 +269,7 @@ async function runFind(search, q) {
         if (r.author) form.elements.author.value = r.author;
         if (r.desc) form.elements.desc.value = r.desc;
         if (r.isbn && !form.elements.isbn.value) form.elements.isbn.value = r.isbn;
-        if (r.cover && !form.elements.cover.value) { form.elements.cover.value = r.cover; $('#edit-cover').src = r.cover; $('#edit-cover').hidden = false; }
+        if (r.cover && !form.elements.cover.value) { form.elements.cover.value = r.cover; paintEditPic(); }
         out.hidden = true;
       };
       out.append(li);
@@ -331,12 +367,17 @@ function placeholder(b) {
   return d;
 }
 
+const sameTitle = (a, b) => { const n = s => (s || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim(); return n(a.split(':')[0]) === n(b.split(':')[0]); };
 async function findCover(b) {
-  if (b.isbn) {
-    try { const r = await Lookup.byIsbn(b.isbn); if (r && r.cover) return r.cover; } catch (e) {}
-  }
-  const r = await Lookup.byTitle(b.title, b.author);
-  return (r && r.cover) || '';
+  const tries = b.kind === 'game'
+    ? [async () => ((await Lookup.searchGame(b.title)).find(r => r.cover && sameTitle(r.title, b.title)) || {}).cover]
+    : [
+      async () => b.isbn && (await Lookup.byIsbn(b.isbn)).cover,
+      async () => (await Lookup.byTitle(b.title, b.author) || {}).cover,
+      async () => ((await Lookup.searchTitle(b.title)).find(r => r.cover && sameTitle(r.title, b.title)) || {}).cover,
+    ];
+  for (const t of tries) { try { const c = await t(); if (c) return c; } catch (e) {} }
+  return '';
 }
 
 // Quietly looks up covers for books that have none (at most once per book per device per day).
@@ -345,7 +386,7 @@ async function autoCovers() {
   let tried = {};
   try { tried = JSON.parse(localStorage.getItem('books-library-cover-tried') || '{}'); } catch (e) {}
   const today = new Date().toISOString().slice(0, 10);
-  const covers = async () => { for (const b of Store.all().filter(b => b.kind !== 'game' && !b.cover && tried[b.id] !== today)) {
+  const covers = async () => { for (const b of Store.all().filter(b => !pic(b) && tried[b.id] !== today)) {
     tried[b.id] = today;
     try {
       const cover = await findCover(b);
@@ -357,7 +398,7 @@ async function autoCovers() {
     tried['d' + b.id] = today;
     try {
       const d = await Lookup.details(b);
-      if (d) { writeCache(b.id, d); if (!b.cover && d.cover) Store.upsert({ id: b.id, cover: d.cover }); else render(); }
+      if (d) { writeCache(b.id, d); if (!pic(b) && d.cover) Store.upsert({ id: b.id, cover: d.cover }); else render(); }
     } catch (e) {}
     await new Promise(r => setTimeout(r, 800));
   } };
@@ -366,29 +407,35 @@ async function autoCovers() {
 }
 setTimeout(autoCovers, 4000);
 
-// ---- fill missing details ----
+// ---- fill missing covers ----
+function paintFillLabel() {
+  const n = Store.all().filter(b => !pic(b)).length;
+  $('#btn-fill').textContent = n ? `Find missing covers (${n} without a picture)` : 'All items have a picture';
+}
 $('#btn-fill').onclick = async () => {
   const btn = $('#btn-fill');
-  const todo = Store.all().filter(b => b.kind !== 'game' && (!b.cover || (!b.isbn && !b.author)));
-  if (!todo.length) return alert('Nothing to fill in: every book already has a cover.');
+  const todo = Store.all().filter(b => !pic(b) || (b.kind !== 'game' && !b.isbn && !b.author));
+  if (!todo.length) return alert('Nothing to fill in: every book and game already has a picture.');
   if (!navigator.onLine) return alert('You are offline. Try again when connected.');
   const filled = [], notFound = [];
   let failed = 0;
+  fillBusy = true;
   for (let i = 0; i < todo.length; i++) {
     btn.textContent = `Filling ${i + 1} of ${todo.length}…`;
     const b = todo[i];
     try {
-      const r = await Lookup.byTitle(b.title, b.author);
+      const r = b.kind === 'game' ? null : await Lookup.byTitle(b.title, b.author);
       const patch = {};
       if (r && !b.author && r.author) patch.author = r.author;
-      if (!b.cover) { const c = (r && r.cover) || await findCover(b); if (c) patch.cover = c; }
+      if (!pic(b)) { const c = (r && r.cover) || await findCover(b); if (c) patch.cover = c; }
       if (Object.keys(patch).length) { Store.upsert({ id: b.id, ...patch }); filled.push(b.title + (patch.author ? ' (author: ' + patch.author + ')' : '')); }
       else notFound.push(b.title);
     } catch (e) { failed++; notFound.push(b.title); }
   }
-  btn.textContent = 'Fill missing details';
-  alert(`Updated ${filled.length} of ${todo.length} books.\n\n` + (filled.length ? 'Check these:\n' + filled.join('\n') + '\n\n' : '') +
-    (notFound.length ? `No confident match for ${notFound.length}${failed ? ' (some lookups failed, try again)' : ''}. Edit those by hand, or scan their barcode.` : ''));
+  fillBusy = false;
+  paintFillLabel();
+  alert(`Updated ${filled.length} of ${todo.length} items.\n\n` + (filled.length ? 'Check these:\n' + filled.join('\n') + '\n\n' : '') +
+    (notFound.length ? `No confident match for ${notFound.length}${failed ? ' (some lookups failed, try again)' : ''}. Open them and tap Edit, then Take or choose photo.` : ''));
 };
 
 // ---- backup ----

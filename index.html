@@ -44,7 +44,7 @@
 
 <footer>
   <button id="btn-sync" class="link"><span id="sync-dot">&#9679;</span> <span id="sync-text">Sync is off</span></button>
-  <button id="btn-fill" class="link">Fill missing details</button>
+  <button id="btn-fill" class="link">Find missing covers</button>
   <button id="btn-export" class="link">Export backup</button>
   <button id="btn-csv" class="link">Export CSV</button>
   <button id="btn-install" class="link" hidden>Install app</button>
@@ -110,6 +110,12 @@
   <form id="edit-form">
     <h2 id="edit-title">Add a book</h2>
     <img id="edit-cover" alt="" hidden>
+    <div class="row">
+      <button type="button" id="photo-btn" class="secondary">Take or choose photo</button>
+      <button type="button" id="photo-remove" class="secondary" hidden>Remove photo</button>
+      <input id="photo-file" type="file" accept="image/*" hidden>
+    </div>
+    <input type="hidden" name="photo">
     <label>Title <input name="title" required></label>
     <button type="button" id="find-btn" data-book class="secondary">Find details by title</button>
     <button type="button" id="find-game" class="secondary" data-game hidden>Find details by name</button>
