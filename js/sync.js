@@ -78,6 +78,7 @@ const Sync = (() => {
       await now();
     },
     signOut() { cfg = { url: cfg.url, key: cfg.key, email: cfg.email }; save(); status('off', 'Sync is off'); },
+    api: rest,
     now,
     onStatus(f) { onStatus = f; },
     start() {
