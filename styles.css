@@ -62,7 +62,6 @@ textarea{width:100%;padding:10px;font:inherit;font-size:16px;border:1px solid va
 .d-mine:empty{display:none}.d-mine p{margin:3px 0}.d-mine .k{color:var(--muted);font-size:.85rem}
 .bar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-top:3px}.bar i{display:block;height:100%;background:var(--accent)}
 
-.ph{display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;font-size:8px;line-height:1.15;padding:3px;overflow:hidden;word-break:break-word}
 
 .badge.pub{opacity:.75}
 
