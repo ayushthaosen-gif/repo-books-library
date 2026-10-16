@@ -83,6 +83,25 @@
   </form>
 </dialog>
 
+<dialog id="detail-dialog">
+  <div class="detail">
+    <img id="d-cover" alt="" hidden>
+    <h2 id="d-title"></h2>
+    <p id="d-author" class="d-author"></p>
+    <div id="d-badges" class="badges"></div>
+    <p id="d-meta" class="hint"></p>
+    <p id="d-rating" class="d-rating" hidden></p>
+    <h3>About this book</h3>
+    <p id="d-desc" class="d-desc">Loading…</p>
+    <p id="d-links" class="hint"></p>
+    <div class="row">
+      <button type="button" id="d-edit">Edit</button>
+      <button type="button" id="d-move" class="secondary" hidden>Got it, move to Library</button>
+      <button type="button" id="d-close" class="secondary">Close</button>
+    </div>
+  </div>
+</dialog>
+
 <dialog id="edit-dialog">
   <form id="edit-form">
     <h2 id="edit-title">Add a book</h2>

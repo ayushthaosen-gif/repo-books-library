@@ -98,5 +98,27 @@ const Lookup = (() => {
       cover: hit.cover_i ? `https://covers.openlibrary.org/b/id/${hit.cover_i}-M.jpg` : '',
     };
   }
-  return { byIsbn, byTitle };
+
+  // Description, rating and extras for the detail page (Google Books). Returns null if nothing is known.
+  async function details(book) {
+    const q = book.isbn ? 'isbn:' + book.isbn : 'intitle:' + book.title.split(':')[0] + (book.author ? '+inauthor:' + book.author.split(',')[0] : '');
+    const items = (await getJson('https://www.googleapis.com/books/v1/volumes?maxResults=5&q=' + encodeURIComponent(q).replace(/%2B/g, '+'))).items || [];
+    const want = norm(book.title.split(':')[0]);
+    const hit = book.isbn ? items[0] : items.find(v => norm((v.volumeInfo || {}).title) === want);
+    if (!hit) return null;
+    const i = hit.volumeInfo;
+    const img = i.imageLinks || {};
+    return {
+      description: i.description || '',
+      rating: i.averageRating || 0,
+      ratings: i.ratingsCount || 0,
+      pages: i.pageCount || 0,
+      publisher: i.publisher || '',
+      published: i.publishedDate || '',
+      categories: (i.categories || []).join(', '),
+      cover: (img.thumbnail || img.smallThumbnail || '').replace('http://', 'https://'),
+      link: i.infoLink || '',
+    };
+  }
+  return { byIsbn, byTitle, details };
 })();

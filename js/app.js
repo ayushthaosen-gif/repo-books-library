@@ -53,7 +53,7 @@ function render() {
       mv.onclick = e => { e.stopPropagation(); Store.upsert({ id: b.id, list: 'library' }); render(); };
       li.append(mv);
     }
-    li.onclick = () => openEdit(b);
+    li.onclick = () => openDetail(b);
     ul.append(li);
   }
   const empty = $('#empty');
@@ -72,6 +72,61 @@ $('#search').oninput = render;
 try { $('#f-sort').value = localStorage.getItem('books-library-sort') || 'added'; } catch (e) {}
 $('#f-sort').onchange = () => { try { localStorage.setItem('books-library-sort', $('#f-sort').value); } catch (e) {} render(); };
 ['#f-room', '#f-status', '#f-lent'].forEach(s => $(s).onchange = render);
+
+// ---- book detail ----
+const ddlg = $('#detail-dialog');
+const DKEY = 'books-library-details-v1';
+const readCache = () => { try { return JSON.parse(localStorage.getItem(DKEY)) || {}; } catch (e) { return {}; } };
+function writeCache(id, v) { try { const c = readCache(); c[id] = v; localStorage.setItem(DKEY, JSON.stringify(c)); } catch (e) {} }
+let detailBook = null;
+$('#d-cover').onerror = () => { $('#d-cover').hidden = true; };
+
+function paintDetail(b, d) {
+  const cover = b.cover || (d && d.cover);
+  $('#d-cover').hidden = !cover;
+  if (cover) $('#d-cover').src = cover;
+  const rt = $('#d-rating');
+  rt.hidden = !(d && d.rating);
+  if (d && d.rating) rt.textContent = `★ ${d.rating.toFixed(1)} / 5` + (d.ratings ? ` (${d.ratings.toLocaleString()} ratings on Google Books)` : ' (Google Books)');
+  $('#d-desc').textContent = d ? (d.description || 'No description found for this book.') : 'No description found for this book.';
+  const meta = [d && d.publisher, d && d.published, d && d.pages ? d.pages + ' pages' : '', d && d.categories].filter(Boolean);
+  $('#d-meta').textContent = meta.join(' · ');
+  const q = encodeURIComponent(b.isbn || b.title + ' ' + (b.author || ''));
+  const links = $('#d-links');
+  links.replaceChildren();
+  const add = (href, text) => links.append(Object.assign(document.createElement('a'), { href, textContent: text, target: '_blank', rel: 'noopener' }), ' ');
+  add(d && d.link ? d.link : 'https://www.google.com/books?q=' + q, 'Reviews on Google Books');
+  add('https://www.goodreads.com/search?q=' + q, 'Reviews on Goodreads');
+}
+async function openDetail(b) {
+  detailBook = b;
+  $('#d-title').textContent = b.title;
+  $('#d-author').textContent = b.author || '';
+  const badges = $('#d-badges');
+  badges.replaceChildren();
+  const badge = (cls, text) => badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + cls, textContent: text }));
+  if (b.list === 'wishlist') badge('', 'Wishlist');
+  else { const st = b.status || 'unread'; badge(st, STATUS_LABEL[st]); }
+  if (b.room) badge('', b.room);
+  if (b.lentTo) badge('lent', 'Lent to ' + b.lentTo);
+  if (b.notes) badge('', b.notes);
+  $('#d-move').hidden = b.list !== 'wishlist';
+  const cached = readCache()[b.id];
+  paintDetail(b, cached);
+  if (!cached) $('#d-desc').textContent = 'Loading…';
+  if (!ddlg.open) ddlg.showModal();
+  if (cached || !navigator.onLine) { if (!cached) $('#d-desc').textContent = 'Connect to the internet to load the description and ratings.'; return; }
+  try {
+    const d = await Lookup.details(b);
+    if (d) writeCache(b.id, d);
+    if (detailBook === b && ddlg.open) paintDetail(b, d);
+  } catch (e) {
+    if (detailBook === b && ddlg.open) $('#d-desc').textContent = 'Could not load the description right now. Try again later.';
+  }
+}
+$('#d-close').onclick = () => ddlg.close();
+$('#d-edit').onclick = () => { ddlg.close(); openEdit(Store.get(detailBook.id) || detailBook); };
+$('#d-move').onclick = () => { Store.upsert({ id: detailBook.id, list: 'library' }); ddlg.close(); render(); };
 
 // ---- add / edit ----
 const dlg = $('#edit-dialog'), form = $('#edit-form');
