@@ -23,6 +23,11 @@ function render() {
     (!room || b.room === room) &&
     (!status || (b.status || 'unread') === status) &&
     (!lentOnly || b.lentTo));
+  const sort = $('#f-sort').value;
+  const byText = f => (x, y) => (x[f] || '\uffff').localeCompare(y[f] || '\uffff', undefined, { sensitivity: 'base' });
+  if (sort === 'title') items.sort(byText('title'));
+  else if (sort === 'author') items.sort(byText('author'));
+  else items.sort((x, y) => (y.added || '').localeCompare(x.added || ''));
   const ul = $('#list');
   ul.replaceChildren();
   for (const b of items) {
@@ -39,6 +44,7 @@ function render() {
     if (tab === 'library') {
       const st = b.status || 'unread';
       badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + st, textContent: STATUS_LABEL[st] }));
+      if (b.rating) badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '★'.repeat(b.rating) }));
       if (b.lentTo) badges.append(Object.assign(document.createElement('span'), { className: 'badge lent', textContent: 'Lent to ' + b.lentTo }));
     }
     if (badges.childElementCount) info.append(badges);
@@ -48,12 +54,14 @@ function render() {
       mv.onclick = e => { e.stopPropagation(); Store.upsert({ id: b.id, list: 'library' }); render(); };
       li.append(mv);
     }
-    li.onclick = () => openEdit(b);
+    li.onclick = () => openDetail(b);
     ul.append(li);
   }
   const empty = $('#empty');
   empty.hidden = items.length > 0;
-  empty.textContent = q ? 'No matches.' : tab === 'library' ? 'No books yet. Tap Scan or Add by hand.' : 'Your wishlist is empty.';
+  empty.textContent = q ? 'No matches.' : tab === 'library'
+    ? 'No books yet. Tap Scan and point the camera at the barcode on the back of a book, or tap Add by hand for books without one.'
+    : 'Your wishlist is empty. Scan or add a book you want and choose Wishlist.';
 }
 
 document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
@@ -62,16 +70,90 @@ document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
   render();
 });
 $('#search').oninput = render;
+try { $('#f-sort').value = localStorage.getItem('books-library-sort') || 'added'; } catch (e) {}
+$('#f-sort').onchange = () => { try { localStorage.setItem('books-library-sort', $('#f-sort').value); } catch (e) {} render(); };
 ['#f-room', '#f-status', '#f-lent'].forEach(s => $(s).onchange = render);
+
+// ---- book detail ----
+const ddlg = $('#detail-dialog');
+const DKEY = 'books-library-details-v1';
+const readCache = () => { try { return JSON.parse(localStorage.getItem(DKEY)) || {}; } catch (e) { return {}; } };
+function writeCache(id, v) { try { const c = readCache(); c[id] = v; localStorage.setItem(DKEY, JSON.stringify(c)); } catch (e) {} }
+let detailBook = null;
+$('#d-cover').onerror = () => { $('#d-cover').hidden = true; };
+
+function paintDetail(b, d) {
+  const cover = b.cover || (d && d.cover);
+  $('#d-cover').hidden = !cover;
+  if (cover) $('#d-cover').src = cover;
+  const rt = $('#d-rating');
+  rt.hidden = !(d && d.rating);
+  if (d && d.rating) rt.textContent = `★ ${d.rating.toFixed(1)} / 5` + (d.ratings ? ` (${d.ratings.toLocaleString()} ratings on Google Books)` : ' (Google Books)');
+  $('#d-desc').textContent = d ? (d.description || 'No description found for this book.') : 'No description found for this book.';
+  const meta = [d && d.publisher, d && d.published, d && d.pages ? d.pages + ' pages' : '', d && d.categories].filter(Boolean);
+  $('#d-meta').textContent = meta.join(' · ');
+  const q = encodeURIComponent(b.isbn || b.title + ' ' + (b.author || ''));
+  const links = $('#d-links');
+  links.replaceChildren();
+  const add = (href, text) => links.append(Object.assign(document.createElement('a'), { href, textContent: text, target: '_blank', rel: 'noopener' }), ' ');
+  add(d && d.link ? d.link : 'https://www.google.com/books?q=' + q, 'Reviews on Google Books');
+  add('https://www.goodreads.com/search?q=' + q, 'Reviews on Goodreads');
+}
+async function openDetail(b) {
+  detailBook = b;
+  $('#d-title').textContent = b.title;
+  $('#d-author').textContent = b.author || '';
+  const badges = $('#d-badges');
+  badges.replaceChildren();
+  const badge = (cls, text) => badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + cls, textContent: text }));
+  if (b.list === 'wishlist') badge('', 'Wishlist');
+  else { const st = b.status || 'unread'; badge(st, STATUS_LABEL[st]); }
+  if (b.room) badge('', b.room);
+  if (b.lentTo) badge('lent', 'Lent to ' + b.lentTo);
+  const mine = $('#d-mine');
+  mine.replaceChildren();
+  const row = (k, v, bar) => {
+    const p = document.createElement('p');
+    p.append(Object.assign(document.createElement('span'), { className: 'k', textContent: k + ': ' }), document.createTextNode(v));
+    if (bar != null) p.append(Object.assign(document.createElement('div'), { className: 'bar' }));
+    if (bar != null) p.lastChild.append(Object.assign(document.createElement('i'), { style: `width:${bar}%` }));
+    mine.append(p);
+  };
+  const pages = (readCache()[b.id] || {}).pages;
+  if (b.rating) row('My rating', '★'.repeat(b.rating) + '☆'.repeat(5 - b.rating));
+  if (b.review) row('My review', b.review);
+  if (b.page) row('Progress', pages ? `page ${b.page} of ${pages} (${Math.min(100, Math.round(b.page / pages * 100))}%)` : `page ${b.page}`, pages ? Math.min(100, Math.round(b.page / pages * 100)) : null);
+  if (b.lentTo) row('Lent', `to ${b.lentTo}` + (b.lentSince ? ` since ${new Date(b.lentSince).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''));
+  if (b.notes) row('Notes', b.notes);
+  $('#d-move').hidden = b.list !== 'wishlist';
+  const cached = readCache()[b.id];
+  paintDetail(b, cached);
+  if (!cached) $('#d-desc').textContent = 'Loading…';
+  if (!ddlg.open) ddlg.showModal();
+  if (cached || !navigator.onLine) { if (!cached) $('#d-desc').textContent = 'Connect to the internet to load the description and ratings.'; return; }
+  try {
+    const d = await Lookup.details(b);
+    if (d) writeCache(b.id, d);
+    if (detailBook === b && ddlg.open) paintDetail(b, d);
+  } catch (e) {
+    if (detailBook === b && ddlg.open) $('#d-desc').textContent = 'Could not load the description right now. Try again later.';
+  }
+}
+$('#d-close').onclick = () => ddlg.close();
+$('#d-edit').onclick = () => { ddlg.close(); openEdit(Store.get(detailBook.id) || detailBook); };
+$('#d-move').onclick = () => { Store.upsert({ id: detailBook.id, list: 'library' }); ddlg.close(); render(); };
 
 // ---- add / edit ----
 const dlg = $('#edit-dialog'), form = $('#edit-form');
-let editingId = null;
+let editingId = null, fromScan = false;
 
-function openEdit(b = {}) {
+function openEdit(b = {}, scanned = false) {
+  fromScan = scanned;
   editingId = b.id || null;
   $('#edit-title').textContent = b.id ? 'Edit book' : 'Add a book';
-  for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'notes']) form.elements[f].value = b[f] || '';
+  for (const f of ['title', 'author', 'isbn', 'cover', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
+  form.elements.rating.value = b.rating || '';
+  $('#find-results').hidden = true;
   form.elements.status.value = b.status || 'unread';
   form.elements.list.value = b.list || tab;
   $('#edit-cover').hidden = !b.cover;
@@ -87,13 +169,47 @@ form.onsubmit = e => {
   e.preventDefault();
   const v = Object.fromEntries(new FormData(form));
   if (editingId) v.id = editingId;
+  v.rating = v.rating ? +v.rating : 0;
+  v.page = v.page ? +v.page : 0;
+  const today = new Date().toISOString().slice(0, 10);
+  if (!v.lentTo.trim()) v.lentSince = '';
+  else if (!v.lentSince) v.lentSince = today;
   Store.upsert(v);
   dlg.close();
   tab = v.list;
+  const again = fromScan && $('#keep-scanning').checked;
+  fromScan = false;
   document.querySelectorAll('nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   render();
+  if (again) setTimeout(() => $('#btn-scan').click(), 150);
 };
-$('#edit-cancel').onclick = () => dlg.close();
+$('#find-btn').onclick = async () => {
+  const q = [form.elements.title.value, form.elements.author.value].filter(Boolean).join(' ').trim();
+  const out = $('#find-results');
+  if (!q) { out.hidden = false; out.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Type a title first.' })); return; }
+  out.hidden = false;
+  out.replaceChildren(Object.assign(document.createElement('li'), { textContent: 'Searching…' }));
+  try {
+    const rs = await Lookup.searchTitle(q);
+    out.replaceChildren();
+    if (!rs.length) { out.append(Object.assign(document.createElement('li'), { textContent: 'No matches. Fill in the details by hand.' })); return; }
+    for (const r of rs) {
+      const li = document.createElement('li');
+      li.append(Object.assign(document.createElement('div'), { className: 't', textContent: r.title }), Object.assign(document.createElement('div'), { className: 'a', textContent: r.author }));
+      li.onclick = () => {
+        form.elements.title.value = r.title;
+        if (r.author) form.elements.author.value = r.author;
+        if (r.isbn && !form.elements.isbn.value) form.elements.isbn.value = r.isbn;
+        if (r.cover && !form.elements.cover.value) { form.elements.cover.value = r.cover; $('#edit-cover').src = r.cover; $('#edit-cover').hidden = false; }
+        out.hidden = true;
+      };
+      out.append(li);
+    }
+  } catch (e) {
+    out.replaceChildren(Object.assign(document.createElement('li'), { textContent: e.message }));
+  }
+};
+$('#edit-cancel').onclick = () => { const again = fromScan && $('#keep-scanning').checked; fromScan = false; dlg.close(); if (again) setTimeout(() => $('#btn-scan').click(), 150); };
 $('#edit-delete').onclick = () => { if (confirm('Delete this book?')) { Store.remove(editingId); dlg.close(); render(); } };
 $('#btn-add').onclick = () => openEdit({});
 
@@ -109,9 +225,9 @@ async function handleIsbn(raw) {
   try {
     const found = await Lookup.byIsbn(raw);
     stopScan();
-    if (found) openEdit({ ...found, list });
+    if (found) openEdit({ ...found, list }, true);
     else {
-      openEdit({ isbn: Store.cleanIsbn(raw), list });
+      openEdit({ isbn: Store.cleanIsbn(raw), list }, true);
       const warn = $('#edit-warn');
       warn.hidden = false;
       warn.textContent = 'No details found for this ISBN. Fill in the title and author by hand.';
@@ -142,6 +258,18 @@ $('#btn-scan').onclick = async () => {
 $('#scan-close').onclick = stopScan;
 sdlg.addEventListener('close', () => Scanner.stop());
 $('#isbn-go').onclick = () => handleIsbn($('#isbn-manual').value);
+
+// ---- CSV export ----
+$('#btn-csv').onclick = () => {
+  const cols = ['title', 'author', 'isbn', 'list', 'status', 'rating', 'review', 'page', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
+  const esc = v => { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const csv = [cols.join(','), ...Store.all().map(b => cols.map(c => esc(b[c])).join(','))].join('\r\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })),
+    download: 'books-library.csv',
+  });
+  a.click();
+};
 
 // ---- fill missing details ----
 $('#btn-fill').onclick = async () => {
