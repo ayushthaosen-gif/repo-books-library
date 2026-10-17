@@ -1,5 +1,5 @@
 // Offline app shell: cache-first for our own files, network for everything else.
-const CACHE = 'books-library-v42';
+const CACHE = 'books-library-v45';
 const SHELL = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'config.js', 'view.html', 'js/view.js', 'js/cover.js', 'js/store.js', 'js/sync.js', 'js/lookup.js', 'js/scanner.js', 'js/app.js', 'vendor/zxing.min.js', 'icons/icon-192.png', 'icons/icon-512.png', 'seed-books.json', 'js/reader.js', 'vendor/pdfjs/pdf.min.js', 'vendor/pdfjs/pdf.worker.min.js', 'vendor/epubjs/epub.min.js', 'vendor/epubjs/jszip.min.js'];
 
 self.addEventListener('install', e => {
