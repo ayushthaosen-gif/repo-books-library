@@ -58,6 +58,7 @@
     <button id="btn-me" class="link">Set my name</button>
     <button id="btn-share" class="link">Share</button>
     <button id="btn-drive" class="link" hidden>Open Drive folder</button>
+    <button id="btn-pdfs" class="link">Get PDFs from Drive</button>
     <button id="btn-drive-set" class="link">Set Drive folder</button>
     <button id="btn-fill" class="link">Find missing covers and details</button>
     <button id="btn-install" class="link" hidden>Install app</button>
@@ -132,6 +133,17 @@
       <button type="button" id="d-move" class="secondary" hidden>Got it, move to Library</button>
       <button type="button" id="d-close" class="secondary">Close</button>
     </div>
+  </div>
+</dialog>
+
+<dialog id="drivepdf-dialog">
+  <h2>PDFs in the family Drive folder</h2>
+  <p class="hint">Pick the book each PDF belongs to, then save them on this phone to read in the app. Matches are guesses, so please check them.</p>
+  <p id="dp-msg" class="warn" hidden></p>
+  <ul id="dp-list" class="dp"></ul>
+  <div class="row">
+    <button type="button" id="dp-save">Save selected on this phone</button>
+    <button type="button" id="dp-close" class="secondary">Close</button>
   </div>
 </dialog>
 
