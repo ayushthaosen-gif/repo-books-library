@@ -25,7 +25,8 @@ const Store = (() => {
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const now = () => new Date().toISOString();
   const cleanIsbn = s => (s || '').replace(/[^0-9Xx]/g, '').toUpperCase();
-  const live = () => books.filter(b => !b.deleted);
+  const SETTINGS = '__settings';
+  const live = () => books.filter(b => !b.deleted && b.id !== SETTINGS);
   return {
     all: live,
     get: id => live().find(b => b.id === id),
@@ -55,6 +56,14 @@ const Store = (() => {
       }
       if (n) { save(); changed(); }
       return n;
+    },
+    // Small shared settings (such as the family Drive folder) ride along with the books so every synced device gets them.
+    setting: k => { const r = books.find(b => b.id === SETTINGS); return r ? r[k] || '' : ''; },
+    setSetting(k, v) {
+      const i = books.findIndex(b => b.id === SETTINGS);
+      if (i >= 0) books[i] = { ...books[i], [k]: v, updated: now() };
+      else books.push({ id: SETTINGS, title: SETTINGS, [k]: v, added: now(), updated: now() });
+      save(); changed();
     },
     onChange: f => listeners.push(f),
     onSaveError: f => errListeners.push(f),

@@ -89,5 +89,41 @@ grant execute on function public.shared_library(text) to anon, authenticated;
 
 Then in the app tap **Share > Create share link** and send the link to whoever you like. Sign-ups stay off, and the link only ever reads.
 
+## 5. Optional: one shared family library
+
+By default each login has its own library. This step makes chosen logins share **one** library (yours), so everyone at home sees and edits the same books, and a book added on any phone shows on all of them. Nobody shares a password: each person gets their own login.
+
+1. **Authentication > Users > Add user > Create new user** for each family member (their own email and password, tick **Auto Confirm User**). Sign-ups stay off.
+2. In **SQL Editor > New query**, run this once, replacing `YOU@example.com` with your login email and the member emails with theirs:
+
+```sql
+create table public.family (
+  owner uuid not null references auth.users(id) on delete cascade,
+  member_email text not null,
+  primary key (owner, member_email)
+);
+alter table public.family enable row level security;
+
+-- You and each member can see their own entry. Nobody can change it from the app.
+create policy "see own family" on public.family for select to authenticated
+  using (owner = auth.uid() or lower(member_email) = lower(auth.jwt()->>'email'));
+
+-- Members can read and write the owner's books.
+create policy "family books" on public.books for all to authenticated
+  using (exists (select 1 from public.family f
+    where f.owner = books.user_id and lower(f.member_email) = lower(auth.jwt()->>'email')))
+  with check (exists (select 1 from public.family f
+    where f.owner = books.user_id and lower(f.member_email) = lower(auth.jwt()->>'email')));
+
+insert into public.family (owner, member_email)
+select id, m from auth.users, unnest(array['mum@example.com', 'dad@example.com']) as m
+where email = 'YOU@example.com';
+```
+
+3. Each family member opens the app, taps **Sync**, enters the same URL and anon key and **their own** email and password. The status line then reads "Synced ... (family library)". Their books join yours; identical starter books merge, not double.
+4. To add someone later, run the last `insert` again with their email. To remove them, `delete from public.family where member_email = '...'`.
+
+**Google Drive:** in Drive, share your books folder with your family's Google accounts (or "Anyone with the link can view"). Each member taps **More > Set Drive folder** once to keep the folder link in the app. PDF links on books sync to everyone, and the reader opens them from Drive.
+
 The dot at the bottom turns green when you are synced. Free Supabase projects pause after a week of no activity;
 opening the app and syncing counts as activity, and a paused project can be resumed from the Supabase dashboard without losing data.

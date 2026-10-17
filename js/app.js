@@ -672,6 +672,22 @@ $('#sync-close').onclick = () => sydlg.close();
 $('#sync-now').onclick = () => Sync.now();
 $('#sync-out').onclick = () => { Sync.signOut(); showSyncState(); };
 
+// ---- family Drive folder (a link kept on this device) ----
+const DRIVE_KEY = 'books-library-drive-folder';
+const driveFolder = () => { try { return Store.setting('driveFolder') || localStorage.getItem(DRIVE_KEY) || ''; } catch (e) { return ''; } };
+function paintDrive() { $('#btn-drive').hidden = !driveFolder(); $('#btn-drive-set').textContent = driveFolder() ? 'Change Drive folder' : 'Set Drive folder'; }
+$('#btn-drive').onclick = () => window.open(driveFolder(), '_blank', 'noopener');
+$('#btn-drive-set').onclick = () => {
+  const v = prompt('Paste the link to your Google Drive folder of books (leave empty to clear). In Drive, share the folder with your family first.', driveFolder());
+  if (v === null) return;
+  const link = v.trim();
+  if (link && !/^https:\/\/(drive|docs)\.google\.com\//.test(link)) return alert('That is not a Google Drive link.');
+  try { localStorage.setItem(DRIVE_KEY, link); } catch (e) {}
+  Store.setSetting('driveFolder', link);
+  paintDrive();
+};
+paintDrive();
+
 // ---- share (read-only link) ----
 const shdlg = $('#share-dialog');
 const shareUrl = t => new URL('view.html', location.href).href + '#' + t;
@@ -719,7 +735,9 @@ $('#share-stop').onclick = async () => {
 };
 $('#share-close').onclick = () => shdlg.close();
 
+paintDrive();
 render();
+Store.onChange(() => { paintDrive(); });
 Store.onChange(render);
 window.addEventListener('storage', e => { if (e.key === Store.KEY) Store.reload(); });
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}

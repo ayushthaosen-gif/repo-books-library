@@ -36,10 +36,20 @@ const Sync = (() => {
     return text ? JSON.parse(text) : null;
   }
 
-  const toRow = b => ({ id: b.id, data: b, updated_at: b.updated, deleted: !!b.deleted });
+  // With a family library, books are saved under the library owner's id so everybody reads and writes the same set.
+  async function resolveOwner() {
+    if (cfg.owner !== undefined) return;
+    try {
+      const rows = await rest('family?select=owner&member_email=eq.' + encodeURIComponent((cfg.email || '').toLowerCase()) + '&limit=1');
+      cfg.owner = rows && rows[0] ? rows[0].owner : '';
+    } catch (e) { cfg.owner = ''; }
+    save();
+  }
+  const toRow = b => ({ ...(cfg.owner ? { user_id: cfg.owner } : {}), id: b.id, data: b, updated_at: b.updated, deleted: !!b.deleted });
   const fromRow = r => ({ ...r.data, id: r.id, updated: r.data.updated || r.updated_at, ...(r.deleted ? { deleted: true } : {}) });
 
   async function runOnce() {
+    await resolveOwner();
     // Pull (with a minute of overlap; merging is idempotent), then push what is newer locally.
     const since = cfg.lastPull ? new Date(Date.parse(cfg.lastPull) - 60000).toISOString() : null;
     const rows = await rest('books?select=id,data,updated_at,deleted&order=updated_at.asc&limit=5000' + (since ? `&updated_at=gt.${encodeURIComponent(since)}` : ''));
@@ -61,7 +71,7 @@ const Sync = (() => {
     status('busy', 'Syncing…');
     try {
       do { again = false; await runOnce(); } while (again);
-      status('ok', 'Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+      status('ok', 'Synced ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + (cfg.owner ? ' (family library)' : ''));
     } catch (e) {
       status('error', navigator.onLine ? e.message : 'Offline. Changes will sync later.');
     } finally { running = false; }
@@ -73,7 +83,7 @@ const Sync = (() => {
     hasPulled: () => !!cfg.pulled,
     settings: () => ({ url: url(), key: key(), email: cfg.email || '' }),
     async signIn(u, k, email, password) {
-      cfg = { ...cfg, url: u.trim(), key: k.trim(), email: email.trim(), lastPull: null, lastPush: null, pulled: false };
+      cfg = { ...cfg, url: u.trim(), key: k.trim(), email: email.trim(), lastPull: null, lastPush: null, pulled: false, owner: undefined };
       await authCall('password', { email: cfg.email, password });
       await now();
     },
