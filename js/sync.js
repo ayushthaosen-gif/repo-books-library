@@ -89,6 +89,16 @@ const Sync = (() => {
     },
     signOut() { cfg = { url: cfg.url, key: cfg.key, email: cfg.email }; save(); status('off', 'Sync is off'); },
     api: rest,
+    // Calls the family's Drive function on Supabase with the signed-in login.
+    async drive(qs) {
+      const r = await fetch(`${url()}/functions/v1/drive?${qs}`, { headers: { apikey: key(), Authorization: 'Bearer ' + await token() } });
+      if (!r.ok) {
+        let m = '';
+        try { m = (await r.clone().json()).error; } catch (e) {}
+        throw new Error(r.status === 404 && !m ? 'The Drive function is not set up yet (see docs/DRIVE.md).' : m || 'Drive request failed (' + r.status + ')');
+      }
+      return r;
+    },
     now,
     onStatus(f) { onStatus = f; },
     start() {

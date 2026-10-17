@@ -113,3 +113,7 @@ summary::marker{content:""}#filter-box summary::before,#more summary::before{con
 .grow{flex:1 1 120px;margin:0!important}
 #d-readers:empty{display:none}
 .badge.rd{background:var(--accent);color:#fff}
+
+.dp{margin:8px 0}.dp li{display:block;cursor:default}.dp .nm{font-weight:600;word-break:break-word}
+.dp select{margin-top:6px}.dp label{display:flex;gap:8px;align-items:flex-start;margin:0}.dp input[type=checkbox]{width:auto;min-height:0;margin-top:4px}
+.dp .st{font-size:.8rem;color:var(--muted);margin-top:4px}

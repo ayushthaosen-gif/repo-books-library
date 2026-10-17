@@ -729,6 +729,73 @@ $('#btn-drive-set').onclick = () => {
 };
 paintDrive();
 
+// ---- PDFs from the family Drive folder (through the Supabase function) ----
+const dpdlg = $('#drivepdf-dialog');
+const wordsOf = t => (t || '').toLowerCase().replace(/\.pdf$/i, '').replace(/[^a-z0-9\u0900-\u097f\u0980-\u09ff]+/g, ' ').split(' ').filter(w => w.length > 1);
+function bestBook(name, books) {
+  const fw = new Set(wordsOf(name));
+  let best = null, score = 0;
+  for (const b of books) {
+    const tw = wordsOf(b.title);
+    if (!tw.length) continue;
+    const sc = tw.filter(w => fw.has(w)).length / tw.length;
+    if (sc > score) { score = sc; best = b; }
+  }
+  return score >= 0.6 ? best : null;
+}
+$('#btn-pdfs').onclick = async () => {
+  const msg = t => { $('#dp-msg').hidden = !t; $('#dp-msg').textContent = t || ''; };
+  const ul = $('#dp-list');
+  ul.replaceChildren();
+  msg('');
+  dpdlg.showModal();
+  if (!Sync.configured()) return msg('Sign in to sync first (More, then the sync line). The Drive folder is read through your library login.');
+  msg('Loading the folder…');
+  try {
+    const files = await (await Sync.drive('action=list')).json();
+    const books = Store.all().filter(b => b.kind !== 'game').sort((a, b) => a.title.localeCompare(b.title));
+    msg(files.length ? '' : 'No PDFs found in the folder.');
+    for (const f of files) {
+      const li = document.createElement('li');
+      const guess = bestBook(f.name, books);
+      const have = guess ? await Reader.has(guess.id) : false;
+      const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!guess && !have });
+      const sel = document.createElement('select');
+      sel.append(new Option('Skip this file', ''), ...books.map(b => new Option(b.title, b.id)));
+      sel.value = guess ? guess.id : '';
+      sel.onchange = () => { cb.checked = !!sel.value; };
+      const name = Object.assign(document.createElement('div'), { className: 'nm', textContent: f.name });
+      const st = Object.assign(document.createElement('div'), { className: 'st', textContent: (f.size ? (f.size / 1048576).toFixed(1) + ' MB' : '') + (have ? ' · already on this phone' : '') });
+      const lab = document.createElement('label');
+      lab.append(cb, Object.assign(document.createElement('div'), { style: 'flex:1' }));
+      lab.lastChild.append(name, sel, st);
+      li.append(lab);
+      li._f = f; li._cb = cb; li._sel = sel; li._st = st;
+      ul.append(li);
+    }
+  } catch (e) { msg(e.message); }
+};
+$('#dp-save').onclick = async () => {
+  const items = [...$('#dp-list').children].filter(li => li._cb.checked && li._sel.value);
+  if (!items.length) return;
+  $('#dp-save').disabled = true;
+  let done = 0;
+  for (const li of items) {
+    li._st.textContent = 'Downloading…';
+    try {
+      const blob = await (await Sync.drive('action=file&id=' + encodeURIComponent(li._f.id))).blob();
+      await Reader.put(li._sel.value, new File([blob], li._f.name, { type: 'application/pdf' }));
+      li._st.textContent = 'Saved on this phone';
+      li._cb.checked = false;
+      done++;
+    } catch (e) { li._st.textContent = 'Failed: ' + e.message; }
+  }
+  $('#dp-save').disabled = false;
+  $('#dp-msg').hidden = false;
+  $('#dp-msg').textContent = `Saved ${done} of ${items.length}. Open a book and tap Read.`;
+};
+$('#dp-close').onclick = () => dpdlg.close();
+
 // ---- share (read-only link) ----
 const shdlg = $('#share-dialog');
 const shareUrl = t => new URL('view.html', location.href).href + '#' + t;
