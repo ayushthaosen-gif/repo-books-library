@@ -32,7 +32,7 @@ dialog label{display:block;margin:8px 0;font-size:.9rem;color:var(--muted)}
 video{width:100%;height:100%;object-fit:cover}
 #edit-cover{width:80px;border-radius:4px;display:block;margin-bottom:8px}
 .warn{color:var(--danger);font-size:.9rem}
-.filters{display:flex;gap:8px;align-items:center;margin-top:8px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
 .filters select{flex:1;min-width:0}
 .chk{display:flex;align-items:center;gap:4px;white-space:nowrap;font-size:.9rem}
 .chk input{width:auto}

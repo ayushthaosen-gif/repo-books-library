@@ -15,8 +15,34 @@ function refreshRooms() {
   $('#rooms').replaceChildren(...rooms.map(r => new Option(r)));
 }
 
+const GENRES = ['Fiction', 'Non-fiction', 'Biography', 'History', 'Politics', 'Law', 'Medicine', 'Religion and spirituality', 'Self-help', 'Business', 'Science', 'Poetry', 'Children', 'Reference', 'Textbook', 'Comics', 'Travel', 'Cooking'];
+const themesOf = b => (b.themes || '').split(',').map(t => t.trim()).filter(Boolean);
+// Best guess at a book's type from the subject labels of Google Books / Open Library.
+function guessGenre(text) {
+  const t = (text || '').toLowerCase();
+  const rules = [['Biography', /biograph|memoir|autobiograph/], ['Law', /\blaw\b|legal|constitution/], ['Medicine', /medic|health|clinical/], ['History', /histor/], ['Politics', /politic|government/],
+    ['Religion and spirituality', /religio|spiritual|philosoph/], ['Self-help', /self-help|self help|personal development|motivation/], ['Business', /business|econom|management|finance/],
+    ['Science', /scien|technolog|mathemat/], ['Poetry', /poetry|poems/], ['Children', /juvenile|children|young adult/], ['Comics', /comic|graphic novel/], ['Cooking', /cooking|cookery/], ['Travel', /travel/],
+    ['Reference', /reference|dictionar|guide/], ['Fiction', /fiction|novel|stories/]];
+  const hit = rules.find(r => r[1].test(t));
+  return hit ? hit[0] : t ? 'Non-fiction' : '';
+}
+// Short theme tags from subject labels: "Business & Economics / Leadership" gives "business, economics, leadership".
+const themesFrom = text => [...new Set((text || '').toLowerCase().split(/[,/;&]| and /).map(x => x.replace(/\s+/g, ' ').trim()).filter(x => x.length > 2 && x.length < 30 && !/^(fiction|general|nonfiction|non-fiction)$/.test(x)))].slice(0, 4).join(', ');
+
+function refreshTypes() {
+  const all = Store.all().filter(b => b.kind !== 'game');
+  const genres = [...new Set(all.map(b => (b.genre || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const themes = [...new Set(all.flatMap(themesOf).map(t => t.toLowerCase()))].sort();
+  const fill = (id, first, list) => { const sel = $(id), cur = sel.value; sel.replaceChildren(new Option(first, ''), ...list.map(x => new Option(x, x))); sel.value = list.includes(cur) ? cur : ''; };
+  fill('#f-genre', 'All types', genres);
+  fill('#f-theme', 'All themes', themes);
+  $('#genres').replaceChildren(...[...new Set([...GENRES, ...genres])].map(g => new Option(g)));
+}
+
 function render() {
   refreshRooms();
+  refreshTypes();
   if (typeof paintFillLabel === 'function' && !fillBusy) paintFillLabel();
   const q = $('#search').value.trim().toLowerCase();
   const room = $('#f-room').value, status = $('#f-status').value, lentOnly = $('#f-lent').checked;
@@ -27,11 +53,14 @@ function render() {
   $('#count-games').textContent = all.filter(isGame).length;
   const games = tab === 'games';
   $('#f-status').hidden = games;
+  $('#f-types').hidden = games;
   $('#btn-add').textContent = games ? 'Add a game' : 'Add by hand';
   $('#btn-add').className = games ? '' : 'secondary';
   const items = all.filter(b => (games ? isGame(b) : !isGame(b) && b.list === tab) &&
-    (!q || [b.title, b.author, b.room, b.notes, b.isbn, b.lentTo].some(f => (f || '').toLowerCase().includes(q))) &&
+    (!q || [b.title, b.author, b.genre, b.themes, b.room, b.notes, b.isbn, b.lentTo].some(f => (f || '').toLowerCase().includes(q))) &&
     (!room || b.room === room) &&
+    (games || !$('#f-genre').value || b.genre === $('#f-genre').value) &&
+    (games || !$('#f-theme').value || themesOf(b).some(t => t.toLowerCase() === $('#f-theme').value)) &&
     (games || !status || (b.status || 'unread') === status) &&
     (!lentOnly || b.lentTo));
   const sort = $('#f-sort').value;
@@ -46,7 +75,7 @@ function render() {
     const cover = Object.assign(document.createElement('img'), { src: pic(b) || genericCover(b), alt: '', loading: 'lazy' });
     if (pic(b)) cover.onerror = () => { cover.onerror = null; cover.src = genericCover(b); };
     const info = document.createElement('div');
-    for (const [cls, text] of [['t', b.title], ['a', b.author], ['abs', ((readCache()[b.id] || {}).description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()], ['n', [b.room, b.notes].filter(Boolean).join(' · ')]]) {
+    for (const [cls, text] of [['t', b.title], ['a', b.author], ['abs', ((readCache()[b.id] || {}).description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()], ['n', [b.genre, b.themes, b.room, b.notes].filter(Boolean).join(' · ')]]) {
       if (!text) continue;
       info.append(Object.assign(document.createElement('div'), { className: cls, textContent: text }));
     }
@@ -91,7 +120,7 @@ document.querySelectorAll('nav button').forEach(btn => btn.onclick = () => {
 $('#search').oninput = render;
 try { $('#f-sort').value = localStorage.getItem('books-library-sort') || 'added'; } catch (e) {}
 $('#f-sort').onchange = () => { try { localStorage.setItem('books-library-sort', $('#f-sort').value); } catch (e) {} render(); };
-['#f-room', '#f-status', '#f-lent'].forEach(s => $(s).onchange = render);
+['#f-room', '#f-status', '#f-lent', '#f-genre', '#f-theme'].forEach(s => $(s).onchange = render);
 
 // ---- book detail ----
 const ddlg = $('#detail-dialog');
@@ -128,6 +157,8 @@ async function openDetail(b) {
   if (b.kind === 'game') { if (b.players) badge('', b.players + ' players'); if (b.playtime) badge('', b.playtime); if (b.list === 'wishlist') badge('', 'Wishlist'); }
   else if (b.list === 'wishlist') badge('', 'Wishlist');
   else { const st = b.status || 'unread'; badge(st, STATUS_LABEL[st]); }
+  if (b.genre) badge('', b.genre);
+  for (const t of themesOf(b)) badge('', t);
   if (b.room) badge('', b.room);
   if (b.lentTo) badge('lent', 'Lent to ' + b.lentTo);
   const mine = $('#d-mine');
@@ -218,7 +249,7 @@ function openEdit(b = {}, scanned = false) {
   document.querySelectorAll('[data-book]').forEach(e => e.hidden = game);
   document.querySelectorAll('[data-game]').forEach(e => e.hidden = !game);
   for (const f of ['players', 'playtime', 'desc']) form.elements[f].value = b[f] || '';
-  for (const f of ['title', 'author', 'isbn', 'cover', 'photo', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
+  for (const f of ['title', 'author', 'isbn', 'cover', 'photo', 'genre', 'themes', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
   form.elements.rating.value = b.rating || '';
   $('#find-results').hidden = true;
   form.elements.status.value = b.status || 'unread';
@@ -346,7 +377,7 @@ $('#isbn-go').onclick = () => handleIsbn($('#isbn-manual').value);
 
 // ---- CSV export ----
 $('#btn-csv').onclick = () => {
-  const cols = ['kind', 'title', 'author', 'isbn', 'players', 'playtime', 'list', 'status', 'rating', 'review', 'page', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
+  const cols = ['kind', 'title', 'author', 'isbn', 'players', 'playtime', 'list', 'status', 'rating', 'review', 'page', 'genre', 'themes', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
   const esc = v => { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const csv = [cols.join(','), ...Store.all().map(b => cols.map(c => esc(b[c])).join(','))].join('\r\n');
   const a = Object.assign(document.createElement('a'), {
@@ -383,7 +414,19 @@ async function fillDetails(b) {
 }
 
 // Quietly looks up covers for books that have none (at most once per book per device per day).
+// Type and themes for books whose description was already looked up on an earlier day (no network needed).
+function fillTypesFromCache() {
+  const cache = readCache();
+  for (const b of Store.all().filter(b => b.kind !== 'game' && (!b.genre || !b.themes) && cache[b.id] && cache[b.id].categories)) {
+    const patch = {};
+    if (!b.genre) patch.genre = guessGenre(cache[b.id].categories);
+    if (!b.themes) patch.themes = themesFrom(cache[b.id].categories);
+    for (const k of Object.keys(patch)) if (!patch[k]) delete patch[k];
+    if (Object.keys(patch).length) Store.upsert({ id: b.id, ...patch });
+  }
+}
 async function autoCovers() {
+  fillTypesFromCache();
   if (!navigator.onLine) return;
   let tried = {};
   try { tried = JSON.parse(localStorage.getItem('books-library-cover-tried') || '{}'); } catch (e) {}
@@ -400,7 +443,15 @@ async function autoCovers() {
     tried['d' + b.id] = today;
     try {
       const d = await Lookup.details(b);
-      if (d) { writeCache(b.id, d); if (!pic(b) && d.cover) Store.upsert({ id: b.id, cover: d.cover }); else render(); }
+      if (d) {
+        writeCache(b.id, d);
+        const patch = {};
+        if (!pic(b) && d.cover) patch.cover = d.cover;
+        if (!b.genre && d.categories) patch.genre = guessGenre(d.categories);
+        if (!b.themes && d.categories) patch.themes = themesFrom(d.categories);
+        for (const k of Object.keys(patch)) if (!patch[k]) delete patch[k];
+        if (Object.keys(patch).length) Store.upsert({ id: b.id, ...patch }); else render();
+      }
     } catch (e) {}
     await new Promise(r => setTimeout(r, 800));
   } };

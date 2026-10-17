@@ -19,13 +19,17 @@
     <button data-tab="wishlist">Wishlist <span id="count-wishlist">0</span></button>
     <button data-tab="games">Games <span id="count-games">0</span></button>
   </nav>
-  <input id="search" type="search" placeholder="Search title, author, shelf, notes">
+  <input id="search" type="search" placeholder="Search title, author, type, theme, shelf">
   <div class="filters">
     <select id="f-room" aria-label="Shelf or room"><option value="">All shelves</option></select>
     <select id="f-status" aria-label="Reading status">
       <option value="">Any status</option><option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option>
     </select>
     <label class="chk"><input id="f-lent" type="checkbox"> Lent out</label>
+  </div>
+  <div class="filters" id="f-types">
+    <select id="f-genre" aria-label="Type of book"><option value="">All types</option></select>
+    <select id="f-theme" aria-label="Theme"><option value="">All themes</option></select>
   </div>
   <select id="f-sort" aria-label="Sort order" class="sort">
     <option value="added">Newest first</option><option value="title">Title A to Z</option><option value="author">Author A to Z</option>
@@ -127,6 +131,9 @@
     <label data-game hidden>Players <input name="players" placeholder="e.g. 2-4"></label>
     <label data-game hidden>Play time <input name="playtime" placeholder="e.g. 45 min"></label>
     <label>Cover image URL (optional) <input name="cover" type="url"></label>
+    <label data-book>Type of book <input name="genre" list="genres" placeholder="e.g. Fiction, Law, Biography"></label>
+    <datalist id="genres"></datalist>
+    <label data-book>Themes (comma separated) <input name="themes" placeholder="e.g. leadership, constitution"></label>
     <label>Shelf / room <input name="room" list="rooms" placeholder="e.g. Living room, shelf 2"></label>
     <datalist id="rooms"></datalist>
     <label data-book>Reading status
