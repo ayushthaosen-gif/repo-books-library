@@ -709,7 +709,7 @@ async function seedStarterBooks() {
         // Already added: only fill fields that are still blank, never overwrite the user's edits.
         const have = Store.get(id);
         const patch = {};
-        for (const f of ['author', 'isbn', 'cover']) if (have && !have[f] && b[f]) patch[f] = b[f];
+        for (const f of ['author', 'isbn', 'cover', 'room']) if (have && !have[f] && b[f]) patch[f] = b[f];
         if (Object.keys(patch).length) { Store.upsert({ id, ...patch }); added++; }
         continue;
       }
