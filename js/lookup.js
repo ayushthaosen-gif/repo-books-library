@@ -2,14 +2,29 @@
 const Lookup = (() => {
   const TIMEOUT_MS = 8000;
 
-  async function getJson(url) {
+  // One retry after a short pause for timeouts, dropped connections, rate limits (429) and server errors (5xx).
+  async function getJson(url, retry = true) {
     const ctl = new AbortController();
     const t = setTimeout(() => ctl.abort(), TIMEOUT_MS);
     try {
       const r = await fetch(url, { signal: ctl.signal });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
       return await r.json();
+    } catch (e) {
+      if (!retry || (e.status && e.status < 500 && e.status !== 429)) throw e;
+      await new Promise(r => setTimeout(r, 1200));
+      return getJson(url, false);
     } finally { clearTimeout(t); }
+  }
+  // Resolves true when the picture really loads and is more than a placeholder pixel.
+  function imageOk(url) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const t = setTimeout(() => resolve(false), TIMEOUT_MS);
+      img.onload = () => { clearTimeout(t); resolve(img.naturalWidth > 60 && img.naturalHeight > 60); };
+      img.onerror = () => { clearTimeout(t); resolve(false); };
+      img.src = url;
+    });
   }
   async function openLibrary(isbn) {
     const d = (await getJson(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`))['ISBN:' + isbn];
@@ -63,6 +78,15 @@ const Lookup = (() => {
     return core + ((10 - (sum % 10)) % 10);
   }
 
+  function toIsbn10(isbn13) {
+    if (!/^978\d{10}$/.test(isbn13)) return '';
+    const core = isbn13.slice(3, 12);
+    let sum = 0;
+    for (let i = 0; i < 9; i++) sum += +core[i] * (10 - i);
+    const c = (11 - (sum % 11)) % 11;
+    return core + (c === 10 ? 'X' : c);
+  }
+
   // Resolves to book info, or null when no source knows the ISBN.
   // Throws Error with a user-facing message if the sources could not be reached.
   function byIsbn(raw) {
@@ -71,7 +95,10 @@ const Lookup = (() => {
     const id = toIsbn13(isbn);
     if (!navigator.onLine) return Promise.reject(new Error('You are offline. Reconnect to look up details, or add the book by hand.'));
     return new Promise((resolve, reject) => {
+      // The 10-digit form of the same ISBN is also tried: some catalogues only know that one.
+      const i10 = toIsbn10(id);
       const sources = [openLibrary, googleBooks, openLibrarySearch, openLibraryEdition];
+      if (i10) sources.push(() => googleBooks(i10).then(b => b && { ...b, isbn: id }), () => openLibraryEdition(i10).then(b => b && { ...b, isbn: id }));
       let pending = sources.length, failed = 0;
       const done = () => {
         if (--pending) return;
@@ -213,5 +240,41 @@ const Lookup = (() => {
     if (/^\d{8,14}$/.test(barcode || '')) { try { const r = await byBarcode(barcode); if (r && r.cover) return r.cover; } catch (e) {} }
     return '';
   }
-  return { byIsbn, byTitle, details, searchTitle, byBarcode, searchGame, gameCover };
+  // Every cover picture worth trying for a book, best first, each checked to really load.
+  // Open Library by ISBN, then by title; Google Books by ISBN, then by title and author.
+  // Returns '' when none loads.
+  async function coverFor(book) {
+    const cands = [];
+    const add = u => { if (u && !cands.includes(u)) cands.push(u); };
+    const id = book.isbn ? Store.cleanIsbn(book.isbn) : '';
+    if (/^(\d{9}[\dX]|\d{13})$/.test(id)) {
+      const i13 = toIsbn13(id), i10 = toIsbn10(i13);
+      add(`https://covers.openlibrary.org/b/isbn/${i13}-M.jpg?default=false`);
+      if (i10) add(`https://covers.openlibrary.org/b/isbn/${i10}-M.jpg?default=false`);
+      try { const b = await byIsbn(id); if (b) add(b.cover); } catch (e) {}
+    }
+    const pick = async () => { for (const u of cands.splice(0)) if (await imageOk(u)) return u; return ''; };
+    let c = await pick();
+    if (c) return c;
+    const base = book.title.split(':')[0].replace(/\(.*?\)/g, ' ').trim();
+    try { const t = await byTitle(book.title, book.author); if (t) add(t.cover); } catch (e) {}
+    c = await pick();
+    if (c) return c;
+    // Search by title plus author, then title alone; trust only matching title and author surname.
+    const last = s => (s || '').toLowerCase().split(',')[0].replace(/[^a-z ]+/g, ' ').trim().split(/\s+/).pop();
+    const wantTitle = norm(base), wantLast = last(book.author);
+    for (const text of [base + (book.author ? ' ' + book.author.split(',')[0] : ''), base]) {
+      try {
+        for (const r of await searchTitle(text)) {
+          if (!r.cover || norm(r.title.split(':')[0]) !== wantTitle) continue;
+          if (wantLast && !(r.author || '').toLowerCase().includes(wantLast)) continue;
+          add(r.cover);
+        }
+      } catch (e) {}
+      c = await pick();
+      if (c) return c;
+    }
+    return '';
+  }
+  return { byIsbn, byTitle, coverFor, imageOk, details, searchTitle, byBarcode, searchGame, gameCover };
 })();
