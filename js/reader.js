@@ -72,7 +72,7 @@ const Reader = (() => {
   function registerThemes(r) {
     for (const [name, c] of Object.entries(EPUB_THEMES)) {
       r.themes.register(name, {
-        body: { background: c.bg + ' !important', color: c.fg + ' !important', 'font-family': FONT + ' !important', 'line-height': '1.55 !important' },
+        body: { margin: '0 !important', background: c.bg + ' !important', color: c.fg + ' !important', 'font-family': FONT + ' !important', 'line-height': '1.55 !important' },
         'p, div, span, li, h1, h2, h3, h4, h5, h6, em, strong, blockquote': { color: c.fg + ' !important' },
         a: { color: c.fg + ' !important' },
       });
@@ -106,6 +106,33 @@ const Reader = (() => {
 
   const isEpub = rec => /\.epub$/i.test(rec.name || '') || (rec.blob && rec.blob.type === 'application/epub+zip');
 
+  // Page X of N for the open EPUB, from the book's reading locations (about one phone page each).
+  function folio(loc) {
+    const book = epub;
+    if (!book || !loc || !loc.start) return;
+    let t = '';
+    if (book.locations && book.locations.length()) {
+      const pg = book.locations.locationFromCfi(loc.start.cfi) + 1, tot = book.locations.length();
+      t = `Page ${Math.max(1, pg)} of ${tot}`;
+      $('#rd-range').value = Math.round((book.locations.percentageFromCfi(loc.start.cfi) || 0) * 100);
+    } else t = Math.round((loc.start.percentage || 0) * 100) + '%';
+    $('#rd-pos').textContent = t;
+    $('#rd-folio').textContent = t;
+  }
+  // Turns the page with a short slide, like paper moving away and the next page arriving.
+  let flipping = false;
+  async function flip(dir) {
+    const el = $('#rd-epub-box');
+    if (!rendition || flipping) return;
+    flipping = true;
+    try {
+      const out = el.animate([{ transform: 'none', opacity: 1 }, { transform: `translateX(${-dir * 36}px)`, opacity: .1 }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
+      await Promise.all([out.finished, dir > 0 ? rendition.next() : rendition.prev()]);
+      out.cancel();
+      el.animate([{ transform: `translateX(${dir * 36}px)`, opacity: .1 }, { transform: 'none', opacity: 1 }], { duration: 170, easing: 'ease-out' });
+    } catch (e) {} finally { flipping = false; }
+  }
+
   async function openEpub(rec, id, title) {
     const lib = await loadEpub();
     const book = lib();
@@ -115,7 +142,7 @@ const Reader = (() => {
     fontPct = p.epubFont || 110;
     $('#rd-title').textContent = title;
     dlg().dataset.mode = 'epub';
-    $('#rd-pos').textContent = 'Opening…';
+    $('#rd-pos').textContent = 'Opening…'; $('#rd-folio').textContent = '';
     $('#rd-range').max = 100; $('#rd-range').value = 0;
     chrome(true);
     dlg().showModal();
@@ -128,15 +155,11 @@ const Reader = (() => {
     rendition.on('relocated', loc => {
       const cfi = loc && loc.start && loc.start.cfi;
       if (cfi) savePrefs(q => { (q.pages = q.pages || {})[id] = cfi; });
-      const pct = book.locations && book.locations.length() ? Math.round((loc.start.percentage || 0) * 100) : null;
-      if (pct != null) { $('#rd-pos').textContent = pct + '%'; $('#rd-range').value = pct; }
+      folio(loc);
     });
     const saved = (p.pages || {})[id];
     await rendition.display(typeof saved === 'string' ? saved : undefined);
-    book.ready.then(() => book.locations.generate(1200)).then(() => {
-      const loc = rendition.currentLocation();
-      if (loc && loc.start) { const pct = Math.round((book.locations.percentageFromCfi(loc.start.cfi) || 0) * 100); $('#rd-pos').textContent = pct + '%'; $('#rd-range').value = pct; }
-    }).catch(() => {});
+    book.ready.then(() => book.locations.generate(1000)).then(() => { if (rendition) folio(rendition.currentLocation()); }).catch(() => {});
   }
   function closeEpub() {
     try { if (rendition) rendition.destroy(); if (epub) epub.destroy(); } catch (e) {}
@@ -169,12 +192,12 @@ const Reader = (() => {
   // EPUB pages are drawn in an iframe that swallows touches, so a transparent layer on top handles swipes and edge taps.
   const gest = $('#rd-gest');
   let gx = 0, gy = 0;
-  const zone = x => { const r = gest.getBoundingClientRect(), f = (x - r.left) / r.width; if (!rendition) return; if (f < .25) rendition.prev(); else if (f > .75) rendition.next(); else chrome(); };
+  const zone = x => { const r = gest.getBoundingClientRect(), f = (x - r.left) / r.width; if (!rendition) return; if (f < .25) flip(-1); else if (f > .75) flip(1); else chrome(); };
   gest.addEventListener('touchstart', e => { gx = e.touches[0].clientX; gy = e.touches[0].clientY; }, { passive: true });
   gest.addEventListener('touchend', e => {
     e.preventDefault();
     const t = e.changedTouches[0], dx = t.clientX - gx, dy = t.clientY - gy;
-    if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy) * 1.2) { if (rendition) (dx < 0 ? rendition.next() : rendition.prev()); }
+    if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy) * 1.2) flip(dx < 0 ? 1 : -1);
     else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) zone(t.clientX);
   });
   gest.addEventListener('click', e => zone(e.clientX));
@@ -204,7 +227,7 @@ const Reader = (() => {
   dlg().addEventListener('keydown', e => {
     const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
     if (!d) return;
-    if (mode === 'epub' && rendition) { d > 0 ? rendition.next() : rendition.prev(); } else turn(d);
+    if (mode === 'epub' && rendition) flip(d); else turn(d);
   });
   window.addEventListener('resize', () => { if (pdf && mode === 'pdf') show(n); });
 
