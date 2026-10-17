@@ -5,6 +5,16 @@ let fillBusy = false;
 // Picture shown for an item: your own photo first, then the looked-up cover.
 const pic = b => b.photo || b.cover || '';
 
+// A Google Drive file link in any of its usual forms gives the file id.
+function driveId(url) {
+  const m = /drive\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([\w-]{10,})/.exec(url || '') || /docs\.google\.com\/[a-z]+\/d\/([\w-]{10,})/.exec(url || '');
+  return m ? m[1] : '';
+}
+// Each person sets their name once on their phone; books then show who is reading them and at which page.
+const ME_KEY = 'books-library-me';
+const myName = () => { try { return (localStorage.getItem(ME_KEY) || '').trim(); } catch (e) { return ''; } };
+const readersOf = b => Object.entries(b.readers || {}).filter(([, r]) => r && r.status);
+const READ_LABEL = { reading: 'reading', read: 'finished' };
 const STATUS_LABEL = { unread: 'Unread', reading: 'Reading', read: 'Read' };
 
 function refreshRooms() {
@@ -40,8 +50,34 @@ function refreshTypes() {
   $('#genres').replaceChildren(...[...new Set([...GENRES, ...genres])].map(g => new Option(g)));
 }
 
+// Backup nudge: books live only on this phone unless sync is on or a backup was saved.
+const BKEY = 'books-library-last-backup';
+let saveFailed = false;
+function paintBackupNote() {
+  const note = $('#backup-note');
+  let last = 0;
+  try { last = +localStorage.getItem(BKEY) || 0; } catch (e) {}
+  const n = Store.all().length;
+  const synced = Sync.configured();
+  const stale = !synced && n >= 5 && (!last || Date.now() - last > 30 * 864e5);
+  note.hidden = !(saveFailed || stale);
+  note.classList.toggle('bad', saveFailed);
+  note.textContent = saveFailed
+    ? 'Your phone could not save the latest change (storage is full or blocked). Tap here to save a backup file now.'
+    : last ? 'It has been over a month since your last backup. Tap here to save one.' : 'Your books are stored only on this phone. Tap here to save a backup file.';
+}
+$('#backup-note').onclick = () => $('#btn-export').click();
+Store.onSaveError(() => { saveFailed = true; paintBackupNote(); });
+
+function paintFilterSummary() {
+  const on = ['#f-room', '#f-status', '#f-genre', '#f-theme'].filter(s => $(s).value && !$(s).closest('[hidden]')).length + ($('#f-lent').checked ? 1 : 0) + ($('#f-sort').value !== 'added' ? 1 : 0);
+  $('#filter-sum').textContent = on ? `Filters and sort (${on} on)` : 'Filters and sort';
+}
+
 function render() {
   refreshRooms();
+  paintBackupNote();
+  paintFilterSummary();
   refreshTypes();
   if (typeof paintFillLabel === 'function' && !fillBusy) paintFillLabel();
   const q = $('#search').value.trim().toLowerCase();
@@ -90,6 +126,7 @@ function render() {
       badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + st, textContent: STATUS_LABEL[st] }));
       if (b.lentTo) badges.append(Object.assign(document.createElement('span'), { className: 'badge lent', textContent: 'Lent to ' + b.lentTo }));
     }
+    if (tab === 'library') for (const [who, r] of readersOf(b).filter(([, r]) => r.status === 'reading')) badges.append(Object.assign(document.createElement('span'), { className: 'badge rd', textContent: who + ' reading' }));
     const pub = (readCache()[b.id] || {}).rating;
     if (b.rating) badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '★'.repeat(b.rating), title: 'Your rating' }));
     else if (pub) badges.append(Object.assign(document.createElement('span'), { className: 'badge pub', textContent: '★ ' + pub.toFixed(1), title: 'Google Books rating' }));
@@ -176,7 +213,31 @@ async function openDetail(b) {
   if (b.page) row('Progress', pages ? `page ${b.page} of ${pages} (${Math.min(100, Math.round(b.page / pages * 100))}%)` : `page ${b.page}`, pages ? Math.min(100, Math.round(b.page / pages * 100)) : null);
   if (b.lentTo) row('Lent', `to ${b.lentTo}` + (b.lentSince ? ` since ${new Date(b.lentSince).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''));
   if (b.notes) row('Notes', b.notes);
+  const rd = $('#d-readers');
+  rd.replaceChildren();
+  for (const [who, r] of readersOf(b)) {
+    const pages = (readCache()[b.id] || {}).pages;
+    const p = document.createElement('p');
+    p.append(Object.assign(document.createElement('span'), { className: 'k', textContent: who + ': ' }), document.createTextNode(READ_LABEL[r.status] + (r.status === 'reading' && r.page ? ` · page ${r.page}` + (pages ? ` of ${pages}` : '') : '')));
+    rd.append(p);
+  }
+  const me = myName(), myRead = (b.readers || {})[me] || {};
+  $('#d-me').hidden = b.kind === 'game' || b.list === 'wishlist' || !me;
+  $('#d-me-status').value = myRead.status || '';
+  $('#d-me-page').value = myRead.page || '';
   $('#d-move').hidden = b.list !== 'wishlist';
+  $('#d-pdf').hidden = !(b.kind !== 'game' && driveId(b.pdf));
+  $('#d-pdfrow').hidden = b.kind === 'game';
+  $('#d-pdfmsg').hidden = true;
+  $('#d-read').hidden = $('#d-unattach').hidden = true;
+  $('#d-attach').textContent = 'Add PDF from phone';
+  if (b.kind !== 'game') Reader.info(b.id).then(rec => {
+    if (!detailBook || detailBook.id !== b.id) return;
+    $('#d-read').hidden = $('#d-unattach').hidden = !rec;
+    if (rec) { $('#d-attach').textContent = 'Replace PDF'; const m = $('#d-pdfmsg'); m.hidden = false; m.textContent = `On this phone: ${rec.name} (${(rec.size / 1048576).toFixed(1)} MB)`; }
+  });
+  $('#d-status-row').hidden = b.kind === 'game' || b.list === 'wishlist';
+  $('#d-status').value = b.status || 'unread';
   if (b.kind === 'game') {
     $('#d-cover').hidden = false;
     $('#d-cover').src = pic(b) || genericCover(b);
@@ -201,6 +262,74 @@ async function openDetail(b) {
   }
 }
 $('#d-close').onclick = () => ddlg.close();
+const pdfMsg = t => { const m = $('#d-pdfmsg'); m.hidden = !t; m.textContent = t || ''; };
+$('#d-read').onclick = async () => { try { await Reader.open(detailBook.id, detailBook.title); } catch (e) { pdfMsg('Could not open this PDF: ' + e.message); } };
+$('#d-attach').onclick = () => $('#d-file').click();
+$('#d-file').onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)) return pdfMsg('That is not a PDF file.');
+  pdfMsg('Saving to this phone…');
+  try {
+    await Reader.put(detailBook.id, f);
+    $('#d-read').hidden = $('#d-unattach').hidden = false;
+    $('#d-attach').textContent = 'Replace PDF';
+    pdfMsg(`On this phone: ${f.name} (${(f.size / 1048576).toFixed(1)} MB)`);
+  } catch (err) { pdfMsg(err.message); }
+};
+$('#d-unattach').onclick = async () => {
+  if (!confirm('Remove this PDF from the phone? The book stays, and the copy in Drive is not touched.')) return;
+  await Reader.remove(detailBook.id);
+  $('#d-read').hidden = $('#d-unattach').hidden = true;
+  $('#d-attach').textContent = 'Add PDF from phone';
+  pdfMsg('Removed from this phone.');
+};
+// In-app reader: the Drive preview of the PDF in a full-screen window.
+const pdlg = $('#pdf-dialog');
+$('#d-pdf').onclick = () => {
+  const id = driveId(detailBook.pdf);
+  if (!id) return;
+  $('#pdf-title').textContent = detailBook.title;
+  $('#pdf-open').href = 'https://drive.google.com/file/d/' + id + '/view';
+  $('#pdf-frame').src = 'https://drive.google.com/file/d/' + id + '/preview';
+  pdlg.showModal();
+};
+$('#pdf-close').onclick = () => pdlg.close();
+pdlg.addEventListener('close', () => { $('#pdf-frame').src = 'about:blank'; });
+function saveMine() {
+  const me = myName();
+  if (!me || !detailBook) return;
+  const cur = Store.get(detailBook.id) || detailBook, readers = { ...(cur.readers || {}) };
+  const status = $('#d-me-status').value, page = +$('#d-me-page').value || 0;
+  if (status) readers[me] = { status, page: status === 'reading' ? page : 0, at: new Date().toISOString() }; else delete readers[me];
+  Store.upsert({ id: cur.id, readers });
+  detailBook = Store.get(cur.id) || detailBook;
+  const rd = $('#d-readers');
+  rd.replaceChildren();
+  for (const [who, r] of readersOf(detailBook)) { const p = document.createElement('p'); p.append(Object.assign(document.createElement('span'), { className: 'k', textContent: who + ': ' }), document.createTextNode(READ_LABEL[r.status] + (r.status === 'reading' && r.page ? ` · page ${r.page}` : ''))); rd.append(p); }
+  render();
+}
+$('#d-me-status').onchange = saveMine;
+$('#d-me-page').onchange = saveMine;
+function askName() {
+  const v = prompt('Your name, so the family can see what you are reading (for example Mum, Dad, Ayush):', myName());
+  if (v === null) return;
+  try { localStorage.setItem(ME_KEY, v.trim()); } catch (e) {}
+  $('#btn-me').textContent = myName() ? 'I am ' + myName() : 'Set my name';
+}
+$('#btn-me').onclick = askName;
+$('#btn-me').textContent = myName() ? 'I am ' + myName() : 'Set my name';
+// Change reading status without opening the editor.
+$('#d-status').onchange = () => {
+  if (!detailBook) return;
+  const status = $('#d-status').value;
+  Store.upsert({ id: detailBook.id, status });
+  detailBook = Store.get(detailBook.id) || detailBook;
+  const st = $('#d-badges').querySelector('.badge.unread,.badge.reading,.badge.read');
+  if (st) { st.className = 'badge ' + status; st.textContent = STATUS_LABEL[status]; }
+  render();
+};
 $('#d-edit').onclick = () => { ddlg.close(); openEdit(Store.get(detailBook.id) || detailBook); };
 $('#d-move').onclick = () => { Store.upsert({ id: detailBook.id, list: 'library' }); ddlg.close(); render(); };
 
@@ -249,7 +378,7 @@ function openEdit(b = {}, scanned = false) {
   document.querySelectorAll('[data-book]').forEach(e => e.hidden = game);
   document.querySelectorAll('[data-game]').forEach(e => e.hidden = !game);
   for (const f of ['players', 'playtime', 'desc']) form.elements[f].value = b[f] || '';
-  for (const f of ['title', 'author', 'isbn', 'cover', 'photo', 'genre', 'themes', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
+  for (const f of ['title', 'author', 'isbn', 'cover', 'photo', 'genre', 'themes', 'pdf', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
   form.elements.rating.value = b.rating || '';
   $('#find-results').hidden = true;
   form.elements.status.value = b.status || 'unread';
@@ -265,8 +394,12 @@ function openEdit(b = {}, scanned = false) {
 form.onsubmit = e => {
   e.preventDefault();
   const v = Object.fromEntries(new FormData(form));
+  v.title = v.title.trim();
+  if (!v.title) { form.elements.title.focus(); return; }
   if (editingId) v.id = editingId;
   v.kind = editingKind;
+  v.pdf = (v.pdf || '').trim();
+  if (v.pdf && !driveId(v.pdf)) { const w = $('#edit-warn'); w.hidden = false; w.textContent = 'That does not look like a Google Drive file link. In Drive, open the file, tap Share, then Copy link.'; form.elements.pdf.focus(); return; }
   v.rating = v.rating ? +v.rating : 0;
   v.page = v.page ? +v.page : 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -310,7 +443,7 @@ async function runFind(search, q) {
   }
 }
 $('#edit-cancel').onclick = () => { const again = fromScan && $('#keep-scanning').checked; fromScan = false; dlg.close(); if (again) setTimeout(() => $('#btn-scan').click(), 150); };
-$('#edit-delete').onclick = () => { if (confirm('Delete this ' + (editingKind === 'game' ? 'game' : 'book') + '?')) { Store.remove(editingId); dlg.close(); render(); } };
+$('#edit-delete').onclick = () => { if (confirm('Delete this ' + (editingKind === 'game' ? 'game' : 'book') + '?')) { Reader.remove(editingId); Store.remove(editingId); dlg.close(); render(); } };
 $('#btn-add').onclick = () => openEdit({});
 
 // ---- scan ----
@@ -377,7 +510,7 @@ $('#isbn-go').onclick = () => handleIsbn($('#isbn-manual').value);
 
 // ---- CSV export ----
 $('#btn-csv').onclick = () => {
-  const cols = ['kind', 'title', 'author', 'isbn', 'players', 'playtime', 'list', 'status', 'rating', 'review', 'page', 'genre', 'themes', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
+  const cols = ['kind', 'title', 'author', 'isbn', 'players', 'playtime', 'list', 'status', 'rating', 'review', 'page', 'genre', 'themes', 'pdf', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
   const esc = v => { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const csv = [cols.join(','), ...Store.all().map(b => cols.map(c => esc(b[c])).join(','))].join('\r\n');
   const a = Object.assign(document.createElement('a'), {
@@ -498,6 +631,9 @@ $('#btn-export').onclick = () => {
     download: 'books-library-backup.json',
   });
   a.click();
+  try { localStorage.setItem(BKEY, String(Date.now())); } catch (e) {}
+  saveFailed = false;
+  paintBackupNote();
 };
 $('#file-import').onchange = async e => {
   const f = e.target.files[0];
@@ -577,6 +713,22 @@ $('#sync-close').onclick = () => sydlg.close();
 $('#sync-now').onclick = () => Sync.now();
 $('#sync-out').onclick = () => { Sync.signOut(); showSyncState(); };
 
+// ---- family Drive folder (a link kept on this device) ----
+const DRIVE_KEY = 'books-library-drive-folder';
+const driveFolder = () => { try { return Store.setting('driveFolder') || localStorage.getItem(DRIVE_KEY) || ''; } catch (e) { return ''; } };
+function paintDrive() { $('#btn-drive').hidden = !driveFolder(); $('#btn-drive-set').textContent = driveFolder() ? 'Change Drive folder' : 'Set Drive folder'; }
+$('#btn-drive').onclick = () => window.open(driveFolder(), '_blank', 'noopener');
+$('#btn-drive-set').onclick = () => {
+  const v = prompt('Paste the link to your Google Drive folder of books (leave empty to clear). In Drive, share the folder with your family first.', driveFolder());
+  if (v === null) return;
+  const link = v.trim();
+  if (link && !/^https:\/\/(drive|docs)\.google\.com\//.test(link)) return alert('That is not a Google Drive link.');
+  try { localStorage.setItem(DRIVE_KEY, link); } catch (e) {}
+  Store.setSetting('driveFolder', link);
+  paintDrive();
+};
+paintDrive();
+
 // ---- share (read-only link) ----
 const shdlg = $('#share-dialog');
 const shareUrl = t => new URL('view.html', location.href).href + '#' + t;
@@ -624,8 +776,12 @@ $('#share-stop').onclick = async () => {
 };
 $('#share-close').onclick = () => shdlg.close();
 
+paintDrive();
 render();
+Store.onChange(() => { paintDrive(); });
 Store.onChange(render);
+window.addEventListener('storage', e => { if (e.key === Store.KEY) Store.reload(); });
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 Sync.start();
 seedStarterBooks();
 
