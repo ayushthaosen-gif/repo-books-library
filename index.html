@@ -112,11 +112,18 @@
     <p id="d-desc" class="d-desc">Loading…</p>
     <p id="d-links" class="hint"></p>
     <div class="row">
+      <button type="button" id="d-pdf" hidden>Read PDF</button>
       <button type="button" id="d-edit">Edit</button>
       <button type="button" id="d-move" class="secondary" hidden>Got it, move to Library</button>
       <button type="button" id="d-close" class="secondary">Close</button>
     </div>
   </div>
+</dialog>
+
+<dialog id="pdf-dialog">
+  <div class="pdf-bar"><strong id="pdf-title"></strong><a id="pdf-open" target="_blank" rel="noopener">Open in Drive</a><button type="button" id="pdf-close" class="secondary">Close</button></div>
+  <iframe id="pdf-frame" title="Book PDF" allow="autoplay"></iframe>
+  <p class="hint">If Drive asks you to sign in or says no access, open the file in Drive, tap Share and set it to "Anyone with the link can view".</p>
 </dialog>
 
 <dialog id="edit-dialog">
@@ -142,6 +149,7 @@
     <label data-book>Type of book <input name="genre" list="genres" placeholder="e.g. Fiction, Law, Biography"></label>
     <datalist id="genres"></datalist>
     <label data-book>Themes (comma separated) <input name="themes" placeholder="e.g. leadership, constitution"></label>
+    <label data-book>PDF link (Google Drive, optional) <input name="pdf" type="url" inputmode="url" placeholder="Paste the Drive share link"></label>
     <label>Shelf / room <input name="room" list="rooms" placeholder="e.g. Living room, shelf 2"></label>
     <datalist id="rooms"></datalist>
     <label data-book>Reading status

@@ -5,6 +5,11 @@ let fillBusy = false;
 // Picture shown for an item: your own photo first, then the looked-up cover.
 const pic = b => b.photo || b.cover || '';
 
+// A Google Drive file link in any of its usual forms gives the file id.
+function driveId(url) {
+  const m = /drive\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([\w-]{10,})/.exec(url || '') || /docs\.google\.com\/[a-z]+\/d\/([\w-]{10,})/.exec(url || '');
+  return m ? m[1] : '';
+}
 const STATUS_LABEL = { unread: 'Unread', reading: 'Reading', read: 'Read' };
 
 function refreshRooms() {
@@ -203,6 +208,7 @@ async function openDetail(b) {
   if (b.lentTo) row('Lent', `to ${b.lentTo}` + (b.lentSince ? ` since ${new Date(b.lentSince).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''));
   if (b.notes) row('Notes', b.notes);
   $('#d-move').hidden = b.list !== 'wishlist';
+  $('#d-pdf').hidden = !(b.kind !== 'game' && driveId(b.pdf));
   $('#d-status-row').hidden = b.kind === 'game' || b.list === 'wishlist';
   $('#d-status').value = b.status || 'unread';
   if (b.kind === 'game') {
@@ -229,6 +235,18 @@ async function openDetail(b) {
   }
 }
 $('#d-close').onclick = () => ddlg.close();
+// In-app reader: the Drive preview of the PDF in a full-screen window.
+const pdlg = $('#pdf-dialog');
+$('#d-pdf').onclick = () => {
+  const id = driveId(detailBook.pdf);
+  if (!id) return;
+  $('#pdf-title').textContent = detailBook.title;
+  $('#pdf-open').href = 'https://drive.google.com/file/d/' + id + '/view';
+  $('#pdf-frame').src = 'https://drive.google.com/file/d/' + id + '/preview';
+  pdlg.showModal();
+};
+$('#pdf-close').onclick = () => pdlg.close();
+pdlg.addEventListener('close', () => { $('#pdf-frame').src = 'about:blank'; });
 // Change reading status without opening the editor.
 $('#d-status').onchange = () => {
   if (!detailBook) return;
@@ -287,7 +305,7 @@ function openEdit(b = {}, scanned = false) {
   document.querySelectorAll('[data-book]').forEach(e => e.hidden = game);
   document.querySelectorAll('[data-game]').forEach(e => e.hidden = !game);
   for (const f of ['players', 'playtime', 'desc']) form.elements[f].value = b[f] || '';
-  for (const f of ['title', 'author', 'isbn', 'cover', 'photo', 'genre', 'themes', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
+  for (const f of ['title', 'author', 'isbn', 'cover', 'photo', 'genre', 'themes', 'pdf', 'room', 'lentTo', 'lentSince', 'notes', 'review', 'page']) form.elements[f].value = b[f] || '';
   form.elements.rating.value = b.rating || '';
   $('#find-results').hidden = true;
   form.elements.status.value = b.status || 'unread';
@@ -307,6 +325,8 @@ form.onsubmit = e => {
   if (!v.title) { form.elements.title.focus(); return; }
   if (editingId) v.id = editingId;
   v.kind = editingKind;
+  v.pdf = (v.pdf || '').trim();
+  if (v.pdf && !driveId(v.pdf)) { const w = $('#edit-warn'); w.hidden = false; w.textContent = 'That does not look like a Google Drive file link. In Drive, open the file, tap Share, then Copy link.'; form.elements.pdf.focus(); return; }
   v.rating = v.rating ? +v.rating : 0;
   v.page = v.page ? +v.page : 0;
   const today = new Date().toISOString().slice(0, 10);
@@ -417,7 +437,7 @@ $('#isbn-go').onclick = () => handleIsbn($('#isbn-manual').value);
 
 // ---- CSV export ----
 $('#btn-csv').onclick = () => {
-  const cols = ['kind', 'title', 'author', 'isbn', 'players', 'playtime', 'list', 'status', 'rating', 'review', 'page', 'genre', 'themes', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
+  const cols = ['kind', 'title', 'author', 'isbn', 'players', 'playtime', 'list', 'status', 'rating', 'review', 'page', 'genre', 'themes', 'pdf', 'room', 'lentTo', 'lentSince', 'notes', 'added'];
   const esc = v => { v = v == null ? '' : String(v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const csv = [cols.join(','), ...Store.all().map(b => cols.map(c => esc(b[c])).join(','))].join('\r\n');
   const a = Object.assign(document.createElement('a'), {

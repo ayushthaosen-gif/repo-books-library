@@ -83,3 +83,11 @@ body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 .backup.bad{border-color:var(--danger);color:var(--danger)}
 .d-status{margin:8px 0}
 summary::marker{content:""}#filter-box summary::before,#more summary::before{content:"\25B8\00a0"}details[open]>summary::before{content:"\25BE\00a0"}
+
+#pdf-dialog{width:100vw;max-width:100vw;height:100dvh;max-height:100dvh;margin:0;border-radius:0;padding:8px;overflow:hidden}
+#pdf-dialog[open]{display:flex;flex-direction:column;gap:6px}
+.pdf-bar{display:flex;align-items:center;gap:10px;padding-top:env(safe-area-inset-top)}
+.pdf-bar strong{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pdf-bar a{color:var(--accent);font-size:.9rem;white-space:nowrap}
+#pdf-frame{flex:1;width:100%;border:1px solid var(--line);border-radius:8px;background:#fff}
+#pdf-dialog .hint{margin:0 0 env(safe-area-inset-bottom)}
