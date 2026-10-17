@@ -65,7 +65,7 @@
     <button id="btn-me" class="link">Set my name</button>
     <button id="btn-share" class="link">Share</button>
     <button id="btn-drive" class="link" hidden>Open Drive folder</button>
-    <button id="btn-pdfs" class="link">Get PDFs from Drive</button>
+    <button id="btn-pdfs" class="link">Get books from Drive</button>
     <button id="btn-drive-set" class="link">Set Drive folder</button>
     <button id="btn-fill" class="link">Find missing covers and details</button>
     <button id="btn-install" class="link" hidden>Install app</button>
@@ -130,9 +130,9 @@
     <div id="d-pdfrow" class="row wrap" hidden>
       <button type="button" id="d-read" hidden>Read</button>
       <button type="button" id="d-pdf" class="secondary" hidden>Read from Drive</button>
-      <button type="button" id="d-attach" class="secondary">Add PDF from phone</button>
-      <button type="button" id="d-unattach" class="secondary" hidden>Remove PDF from phone</button>
-      <input id="d-file" type="file" accept="application/pdf,.pdf" hidden>
+      <button type="button" id="d-attach" class="secondary">Add PDF or EPUB from phone</button>
+      <button type="button" id="d-unattach" class="secondary" hidden>Remove file from phone</button>
+      <input id="d-file" type="file" accept="application/pdf,application/epub+zip,.pdf,.epub" hidden>
     </div>
     <p id="d-pdfmsg" class="hint" hidden></p>
     <div class="row">
@@ -144,8 +144,8 @@
 </dialog>
 
 <dialog id="drivepdf-dialog">
-  <h2>PDFs in the family Drive folder</h2>
-  <p class="hint">Pick the book each PDF belongs to, then save them on this phone to read in the app. Matches are guesses, so please check them.</p>
+  <h2>Books in the family Drive folder</h2>
+  <p class="hint">Pick the book each file (PDF or EPUB) belongs to, then save them on this phone to read in the app. Matches are guesses, so please check them.</p>
   <p id="dp-msg" class="warn" hidden></p>
   <ul id="dp-list" class="dp"></ul>
   <div class="row">
@@ -157,6 +157,7 @@
 <dialog id="reader-dialog" data-theme="light">
   <div class="rd-top rd-chrome"><button type="button" id="rd-close">Done</button><strong id="rd-title"></strong><button type="button" id="rd-theme" aria-label="Page colour">Aa</button></div>
   <div id="rd-scroll"><canvas id="rd-canvas"></canvas></div>
+  <div id="rd-epub"><div id="rd-epub-box"></div></div>
   <div class="rd-foot rd-chrome">
     <button type="button" id="rd-zout" aria-label="Smaller">A&minus;</button>
     <div class="rd-mid"><input type="range" id="rd-range" min="1" max="1" value="1" aria-label="Page"><span id="rd-pos"></span></div>

@@ -280,11 +280,11 @@ async function openDetail(b) {
   $('#d-pdfrow').hidden = b.kind === 'game';
   $('#d-pdfmsg').hidden = true;
   $('#d-read').hidden = $('#d-unattach').hidden = true;
-  $('#d-attach').textContent = 'Add PDF from phone';
+  $('#d-attach').textContent = 'Add PDF or EPUB from phone';
   if (b.kind !== 'game') Reader.info(b.id).then(rec => {
     if (!detailBook || detailBook.id !== b.id) return;
     $('#d-read').hidden = $('#d-unattach').hidden = !rec;
-    if (rec) { $('#d-attach').textContent = 'Replace PDF'; const m = $('#d-pdfmsg'); m.hidden = false; m.textContent = `On this phone: ${rec.name} (${(rec.size / 1048576).toFixed(1)} MB)`; }
+    if (rec) { $('#d-attach').textContent = 'Replace file'; const m = $('#d-pdfmsg'); m.hidden = false; m.textContent = `On this phone: ${rec.name} (${(rec.size / 1048576).toFixed(1)} MB)`; }
   });
   $('#d-status-row').hidden = b.kind === 'game' || b.list === 'wishlist';
   $('#d-status').value = b.status || 'unread';
@@ -313,26 +313,26 @@ async function openDetail(b) {
 }
 $('#d-close').onclick = () => ddlg.close();
 const pdfMsg = t => { const m = $('#d-pdfmsg'); m.hidden = !t; m.textContent = t || ''; };
-$('#d-read').onclick = async () => { try { await Reader.open(detailBook.id, detailBook.title); } catch (e) { pdfMsg('Could not open this PDF: ' + e.message); } };
+$('#d-read').onclick = async () => { try { await Reader.open(detailBook.id, detailBook.title); } catch (e) { pdfMsg('Could not open this book: ' + e.message); } };
 $('#d-attach').onclick = () => $('#d-file').click();
 $('#d-file').onchange = async e => {
   const f = e.target.files[0];
   e.target.value = '';
   if (!f) return;
-  if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)) return pdfMsg('That is not a PDF file.');
+  if (!/\.(pdf|epub)$/i.test(f.name) && !/pdf|epub/i.test(f.type)) return pdfMsg('That is not a PDF or EPUB file.');
   pdfMsg('Saving to this phone…');
   try {
     await Reader.put(detailBook.id, f);
     $('#d-read').hidden = $('#d-unattach').hidden = false;
-    $('#d-attach').textContent = 'Replace PDF';
+    $('#d-attach').textContent = 'Replace file';
     pdfMsg(`On this phone: ${f.name} (${(f.size / 1048576).toFixed(1)} MB)`);
   } catch (err) { pdfMsg(err.message); }
 };
 $('#d-unattach').onclick = async () => {
-  if (!confirm('Remove this PDF from the phone? The book stays, and the copy in Drive is not touched.')) return;
+  if (!confirm('Remove this file from the phone? The book stays, and the copy in Drive is not touched.')) return;
   await Reader.remove(detailBook.id);
   $('#d-read').hidden = $('#d-unattach').hidden = true;
-  $('#d-attach').textContent = 'Add PDF from phone';
+  $('#d-attach').textContent = 'Add PDF or EPUB from phone';
   pdfMsg('Removed from this phone.');
 };
 // In-app reader: the Drive preview of the PDF in a full-screen window.
@@ -804,7 +804,7 @@ $('#btn-pdfs').onclick = async () => {
   try {
     const files = await (await Sync.drive('action=list')).json();
     const books = Store.all().filter(b => b.kind !== 'game').sort((a, b) => a.title.localeCompare(b.title));
-    msg(files.length ? '' : 'No PDFs found in the folder.');
+    msg(files.length ? '' : 'The folder opened but has no PDF or EPUB files in it (or its sub-folders). Google Docs and shortcuts are not listed.');
     for (const f of files) {
       const li = document.createElement('li');
       const guess = bestBook(f.name, books);
@@ -833,8 +833,8 @@ $('#dp-save').onclick = async () => {
   for (const li of items) {
     li._st.textContent = 'Downloading…';
     try {
-      const blob = await (await Sync.drive('action=file&id=' + encodeURIComponent(li._f.id))).blob();
-      await Reader.put(li._sel.value, new File([blob], li._f.name, { type: 'application/pdf' }));
+      const blob = await (await Sync.drive('action=file&id=' + encodeURIComponent(li._f.id) + '&name=' + encodeURIComponent(li._f.name))).blob();
+      await Reader.put(li._sel.value, new File([blob], li._f.name, { type: /\.epub$/i.test(li._f.name) ? 'application/epub+zip' : 'application/pdf' }));
       li._st.textContent = 'Saved on this phone';
       li._cb.checked = false;
       done++;
