@@ -793,6 +793,12 @@ function bestBook(name, books) {
   }
   return score >= 0.6 ? best : null;
 }
+const NEW = '__new';
+function fileBook(name) {
+  const base = name.replace(/\.(pdf|epub)$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const m = base.match(/^(.+?)\s+-\s+(.+)$/);
+  return m ? { title: m[1].trim(), author: m[2].trim() } : { title: base, author: '' };
+}
 $('#btn-pdfs').onclick = async () => {
   const msg = t => { $('#dp-msg').hidden = !t; $('#dp-msg').textContent = t || ''; };
   const ul = $('#dp-list');
@@ -809,10 +815,10 @@ $('#btn-pdfs').onclick = async () => {
       const li = document.createElement('li');
       const guess = bestBook(f.name, books);
       const have = guess ? await Reader.has(guess.id) : false;
-      const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !!guess && !have });
+      const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !have });
       const sel = document.createElement('select');
-      sel.append(new Option('Skip this file', ''), ...books.map(b => new Option(b.title, b.id)));
-      sel.value = guess ? guess.id : '';
+      sel.append(new Option('Skip this file', ''), new Option('Add as a new book in my library', NEW), ...books.map(b => new Option(b.title, b.id)));
+      sel.value = guess ? guess.id : NEW;
       sel.onchange = () => { cb.checked = !!sel.value; };
       const name = Object.assign(document.createElement('div'), { className: 'nm', textContent: f.name });
       const st = Object.assign(document.createElement('div'), { className: 'st', textContent: (f.size ? (f.size / 1048576).toFixed(1) + ' MB' : '') + (have ? ' · already on this phone' : '') });
@@ -833,8 +839,16 @@ $('#dp-save').onclick = async () => {
   for (const li of items) {
     li._st.textContent = 'Downloading…';
     try {
+      let target = li._sel.value;
+      if (target === NEW) {
+        target = 'drv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        const fb = fileBook(li._f.name);
+        Store.upsert({ id: target, title: fb.title, author: fb.author, list: 'library', kind: 'book', status: 'unread' });
+        li._sel.append(new Option(fb.title, target));
+        li._sel.value = target;
+      }
       const blob = await (await Sync.drive('action=file&id=' + encodeURIComponent(li._f.id) + '&name=' + encodeURIComponent(li._f.name))).blob();
-      await Reader.put(li._sel.value, new File([blob], li._f.name, { type: /\.epub$/i.test(li._f.name) ? 'application/epub+zip' : 'application/pdf' }));
+      await Reader.put(target, new File([blob], li._f.name, { type: /\.epub$/i.test(li._f.name) ? 'application/epub+zip' : 'application/pdf' }));
       li._st.textContent = 'Saved on this phone';
       li._cb.checked = false;
       done++;
@@ -842,7 +856,8 @@ $('#dp-save').onclick = async () => {
   }
   $('#dp-save').disabled = false;
   $('#dp-msg').hidden = false;
-  $('#dp-msg').textContent = `Saved ${done} of ${items.length}. Open a book and tap Read.`;
+  $('#dp-msg').textContent = `Saved ${done} of ${items.length}. They are in your library now; open a book and tap Read.`;
+  render();
 };
 $('#dp-close').onclick = () => dpdlg.close();
 
