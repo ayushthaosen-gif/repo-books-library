@@ -209,6 +209,15 @@ async function openDetail(b) {
   if (b.notes) row('Notes', b.notes);
   $('#d-move').hidden = b.list !== 'wishlist';
   $('#d-pdf').hidden = !(b.kind !== 'game' && driveId(b.pdf));
+  $('#d-pdfrow').hidden = b.kind === 'game';
+  $('#d-pdfmsg').hidden = true;
+  $('#d-read').hidden = $('#d-unattach').hidden = true;
+  $('#d-attach').textContent = 'Add PDF from phone';
+  if (b.kind !== 'game') Reader.info(b.id).then(rec => {
+    if (!detailBook || detailBook.id !== b.id) return;
+    $('#d-read').hidden = $('#d-unattach').hidden = !rec;
+    if (rec) { $('#d-attach').textContent = 'Replace PDF'; const m = $('#d-pdfmsg'); m.hidden = false; m.textContent = `On this phone: ${rec.name} (${(rec.size / 1048576).toFixed(1)} MB)`; }
+  });
   $('#d-status-row').hidden = b.kind === 'game' || b.list === 'wishlist';
   $('#d-status').value = b.status || 'unread';
   if (b.kind === 'game') {
@@ -235,6 +244,29 @@ async function openDetail(b) {
   }
 }
 $('#d-close').onclick = () => ddlg.close();
+const pdfMsg = t => { const m = $('#d-pdfmsg'); m.hidden = !t; m.textContent = t || ''; };
+$('#d-read').onclick = async () => { try { await Reader.open(detailBook.id, detailBook.title); } catch (e) { pdfMsg('Could not open this PDF: ' + e.message); } };
+$('#d-attach').onclick = () => $('#d-file').click();
+$('#d-file').onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  if (!/pdf/i.test(f.type) && !/\.pdf$/i.test(f.name)) return pdfMsg('That is not a PDF file.');
+  pdfMsg('Saving to this phone…');
+  try {
+    await Reader.put(detailBook.id, f);
+    $('#d-read').hidden = $('#d-unattach').hidden = false;
+    $('#d-attach').textContent = 'Replace PDF';
+    pdfMsg(`On this phone: ${f.name} (${(f.size / 1048576).toFixed(1)} MB)`);
+  } catch (err) { pdfMsg(err.message); }
+};
+$('#d-unattach').onclick = async () => {
+  if (!confirm('Remove this PDF from the phone? The book stays, and the copy in Drive is not touched.')) return;
+  await Reader.remove(detailBook.id);
+  $('#d-read').hidden = $('#d-unattach').hidden = true;
+  $('#d-attach').textContent = 'Add PDF from phone';
+  pdfMsg('Removed from this phone.');
+};
 // In-app reader: the Drive preview of the PDF in a full-screen window.
 const pdlg = $('#pdf-dialog');
 $('#d-pdf').onclick = () => {
@@ -370,7 +402,7 @@ async function runFind(search, q) {
   }
 }
 $('#edit-cancel').onclick = () => { const again = fromScan && $('#keep-scanning').checked; fromScan = false; dlg.close(); if (again) setTimeout(() => $('#btn-scan').click(), 150); };
-$('#edit-delete').onclick = () => { if (confirm('Delete this ' + (editingKind === 'game' ? 'game' : 'book') + '?')) { Store.remove(editingId); dlg.close(); render(); } };
+$('#edit-delete').onclick = () => { if (confirm('Delete this ' + (editingKind === 'game' ? 'game' : 'book') + '?')) { Reader.remove(editingId); Store.remove(editingId); dlg.close(); render(); } };
 $('#btn-add').onclick = () => openEdit({});
 
 // ---- scan ----

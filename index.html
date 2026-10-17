@@ -111,12 +111,29 @@
     <h3 id="d-about-h">About this book</h3>
     <p id="d-desc" class="d-desc">Loading…</p>
     <p id="d-links" class="hint"></p>
+    <div id="d-pdfrow" class="row wrap" hidden>
+      <button type="button" id="d-read" hidden>Read</button>
+      <button type="button" id="d-pdf" class="secondary" hidden>Read from Drive</button>
+      <button type="button" id="d-attach" class="secondary">Add PDF from phone</button>
+      <button type="button" id="d-unattach" class="secondary" hidden>Remove PDF from phone</button>
+      <input id="d-file" type="file" accept="application/pdf,.pdf" hidden>
+    </div>
+    <p id="d-pdfmsg" class="hint" hidden></p>
     <div class="row">
-      <button type="button" id="d-pdf" hidden>Read PDF</button>
       <button type="button" id="d-edit">Edit</button>
       <button type="button" id="d-move" class="secondary" hidden>Got it, move to Library</button>
       <button type="button" id="d-close" class="secondary">Close</button>
     </div>
+  </div>
+</dialog>
+
+<dialog id="reader-dialog" data-theme="light">
+  <div class="rd-top rd-chrome"><button type="button" id="rd-close">Done</button><strong id="rd-title"></strong><button type="button" id="rd-theme" aria-label="Page colour">Aa</button></div>
+  <div id="rd-scroll"><canvas id="rd-canvas"></canvas></div>
+  <div class="rd-foot rd-chrome">
+    <button type="button" id="rd-zout" aria-label="Smaller">A&minus;</button>
+    <div class="rd-mid"><input type="range" id="rd-range" min="1" max="1" value="1" aria-label="Page"><span id="rd-pos"></span></div>
+    <button type="button" id="rd-zin" aria-label="Larger">A+</button>
   </div>
 </dialog>
 
@@ -195,6 +212,7 @@
 <script src="js/cover.js"></script>
 <script src="js/lookup.js"></script>
 <script src="js/scanner.js"></script>
+<script src="js/reader.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
