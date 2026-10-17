@@ -10,6 +10,11 @@ function driveId(url) {
   const m = /drive\.google\.com\/(?:file\/d\/|open\?(?:[^#]*&)?id=|uc\?(?:[^#]*&)?id=)([\w-]{10,})/.exec(url || '') || /docs\.google\.com\/[a-z]+\/d\/([\w-]{10,})/.exec(url || '');
   return m ? m[1] : '';
 }
+// Each person sets their name once on their phone; books then show who is reading them and at which page.
+const ME_KEY = 'books-library-me';
+const myName = () => { try { return (localStorage.getItem(ME_KEY) || '').trim(); } catch (e) { return ''; } };
+const readersOf = b => Object.entries(b.readers || {}).filter(([, r]) => r && r.status);
+const READ_LABEL = { reading: 'reading', read: 'finished' };
 const STATUS_LABEL = { unread: 'Unread', reading: 'Reading', read: 'Read' };
 
 function refreshRooms() {
@@ -121,6 +126,7 @@ function render() {
       badges.append(Object.assign(document.createElement('span'), { className: 'badge ' + st, textContent: STATUS_LABEL[st] }));
       if (b.lentTo) badges.append(Object.assign(document.createElement('span'), { className: 'badge lent', textContent: 'Lent to ' + b.lentTo }));
     }
+    if (tab === 'library') for (const [who, r] of readersOf(b).filter(([, r]) => r.status === 'reading')) badges.append(Object.assign(document.createElement('span'), { className: 'badge rd', textContent: who + ' reading' }));
     const pub = (readCache()[b.id] || {}).rating;
     if (b.rating) badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '★'.repeat(b.rating), title: 'Your rating' }));
     else if (pub) badges.append(Object.assign(document.createElement('span'), { className: 'badge pub', textContent: '★ ' + pub.toFixed(1), title: 'Google Books rating' }));
@@ -207,6 +213,18 @@ async function openDetail(b) {
   if (b.page) row('Progress', pages ? `page ${b.page} of ${pages} (${Math.min(100, Math.round(b.page / pages * 100))}%)` : `page ${b.page}`, pages ? Math.min(100, Math.round(b.page / pages * 100)) : null);
   if (b.lentTo) row('Lent', `to ${b.lentTo}` + (b.lentSince ? ` since ${new Date(b.lentSince).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''));
   if (b.notes) row('Notes', b.notes);
+  const rd = $('#d-readers');
+  rd.replaceChildren();
+  for (const [who, r] of readersOf(b)) {
+    const pages = (readCache()[b.id] || {}).pages;
+    const p = document.createElement('p');
+    p.append(Object.assign(document.createElement('span'), { className: 'k', textContent: who + ': ' }), document.createTextNode(READ_LABEL[r.status] + (r.status === 'reading' && r.page ? ` · page ${r.page}` + (pages ? ` of ${pages}` : '') : '')));
+    rd.append(p);
+  }
+  const me = myName(), myRead = (b.readers || {})[me] || {};
+  $('#d-me').hidden = b.kind === 'game' || b.list === 'wishlist' || !me;
+  $('#d-me-status').value = myRead.status || '';
+  $('#d-me-page').value = myRead.page || '';
   $('#d-move').hidden = b.list !== 'wishlist';
   $('#d-pdf').hidden = !(b.kind !== 'game' && driveId(b.pdf));
   $('#d-pdfrow').hidden = b.kind === 'game';
@@ -279,6 +297,29 @@ $('#d-pdf').onclick = () => {
 };
 $('#pdf-close').onclick = () => pdlg.close();
 pdlg.addEventListener('close', () => { $('#pdf-frame').src = 'about:blank'; });
+function saveMine() {
+  const me = myName();
+  if (!me || !detailBook) return;
+  const cur = Store.get(detailBook.id) || detailBook, readers = { ...(cur.readers || {}) };
+  const status = $('#d-me-status').value, page = +$('#d-me-page').value || 0;
+  if (status) readers[me] = { status, page: status === 'reading' ? page : 0, at: new Date().toISOString() }; else delete readers[me];
+  Store.upsert({ id: cur.id, readers });
+  detailBook = Store.get(cur.id) || detailBook;
+  const rd = $('#d-readers');
+  rd.replaceChildren();
+  for (const [who, r] of readersOf(detailBook)) { const p = document.createElement('p'); p.append(Object.assign(document.createElement('span'), { className: 'k', textContent: who + ': ' }), document.createTextNode(READ_LABEL[r.status] + (r.status === 'reading' && r.page ? ` · page ${r.page}` : ''))); rd.append(p); }
+  render();
+}
+$('#d-me-status').onchange = saveMine;
+$('#d-me-page').onchange = saveMine;
+function askName() {
+  const v = prompt('Your name, so the family can see what you are reading (for example Mum, Dad, Ayush):', myName());
+  if (v === null) return;
+  try { localStorage.setItem(ME_KEY, v.trim()); } catch (e) {}
+  $('#btn-me').textContent = myName() ? 'I am ' + myName() : 'Set my name';
+}
+$('#btn-me').onclick = askName;
+$('#btn-me').textContent = myName() ? 'I am ' + myName() : 'Set my name';
 // Change reading status without opening the editor.
 $('#d-status').onchange = () => {
   if (!detailBook) return;

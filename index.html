@@ -55,6 +55,7 @@
   <label class="link">Import backup<input id="file-import" type="file" accept="application/json,.json" hidden></label>
   <details id="more"><summary>More</summary>
     <button id="btn-sync" class="link"><span id="sync-dot">&#9679;</span> <span id="sync-text">Sync is off</span></button>
+    <button id="btn-me" class="link">Set my name</button>
     <button id="btn-share" class="link">Share</button>
     <button id="btn-drive" class="link" hidden>Open Drive folder</button>
     <button id="btn-drive-set" class="link">Set Drive folder</button>
@@ -109,6 +110,11 @@
     <label id="d-status-row" class="d-status">Reading status
       <select id="d-status"><option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option></select>
     </label>
+    <div id="d-readers" class="d-mine"></div>
+    <div id="d-me" class="row wrap" hidden>
+      <label class="grow">My reading <select id="d-me-status"><option value="">Not reading</option><option value="reading">Reading</option><option value="read">Finished</option></select></label>
+      <label class="grow">My page <input id="d-me-page" type="number" min="0" inputmode="numeric"></label>
+    </div>
     <div id="d-mine" class="d-mine"></div>
     <h3 id="d-about-h">About this book</h3>
     <p id="d-desc" class="d-desc">Loading…</p>

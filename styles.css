@@ -109,3 +109,7 @@ summary::marker{content:""}#filter-box summary::before,#more summary::before{con
 #rd-canvas{flex:none;background:#fff;box-shadow:0 1px 10px #0003;border-radius:2px}
 #reader-dialog[data-theme=sepia] #rd-canvas{filter:sepia(.45) brightness(.96)}
 #reader-dialog[data-theme=night] #rd-canvas{filter:invert(1) hue-rotate(180deg) brightness(.9);box-shadow:none}
+
+.grow{flex:1 1 120px;margin:0!important}
+#d-readers:empty{display:none}
+.badge.rd{background:var(--accent);color:#fff}
