@@ -72,3 +72,14 @@ dialog form>.row:last-child,#detail-dialog .row:last-child{position:sticky;botto
 body{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
 
 [hidden]{display:none!important}
+
+#filter-box{margin-top:8px}
+#filter-box summary,#more summary{cursor:pointer;color:var(--muted);font-size:.9rem;min-height:44px;display:flex;align-items:center}
+#more{width:100%;text-align:center}
+#more summary{justify-content:center}
+#more[open]{display:flex;flex-wrap:wrap;justify-content:center;gap:0 16px}
+#more[open] summary{width:100%}
+.backup{margin:8px 16px 0;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--card);font-size:.9rem;cursor:pointer}
+.backup.bad{border-color:var(--danger);color:var(--danger)}
+.d-status{margin:8px 0}
+summary::marker{content:""}#filter-box summary::before,#more summary::before{content:"\25B8\00a0"}details[open]>summary::before{content:"\25BE\00a0"}

@@ -20,6 +20,7 @@
     <button data-tab="games">Games <span id="count-games">0</span></button>
   </nav>
   <input id="search" type="search" placeholder="Search title, author, type, theme, shelf">
+  <details id="filter-box"><summary id="filter-sum">Filters and sort</summary>
   <div class="filters">
     <select id="f-room" aria-label="Shelf or room"><option value="">All shelves</option></select>
     <select id="f-status" aria-label="Reading status">
@@ -34,6 +35,7 @@
   <select id="f-sort" aria-label="Sort order" class="sort">
     <option value="added">Newest first</option><option value="title">Title A to Z</option><option value="author">Author A to Z</option>
   </select>
+  </details>
 </header>
 
 <main>
@@ -46,14 +48,17 @@
   <button id="btn-add" class="secondary">Add by hand</button>
 </div>
 
+<p id="backup-note" class="backup" hidden></p>
 <footer>
-  <button id="btn-sync" class="link"><span id="sync-dot">&#9679;</span> <span id="sync-text">Sync is off</span></button>
-  <button id="btn-share" class="link">Share</button>
-  <button id="btn-fill" class="link">Find missing covers and details</button>
   <button id="btn-export" class="link">Export backup</button>
   <button id="btn-csv" class="link">Export CSV</button>
-  <button id="btn-install" class="link" hidden>Install app</button>
-  <label class="link">Import backup<input id="file-import" type="file" accept="application/json" hidden></label>
+  <label class="link">Import backup<input id="file-import" type="file" accept="application/json,.json" hidden></label>
+  <details id="more"><summary>More</summary>
+    <button id="btn-sync" class="link"><span id="sync-dot">&#9679;</span> <span id="sync-text">Sync is off</span></button>
+    <button id="btn-share" class="link">Share</button>
+    <button id="btn-fill" class="link">Find missing covers and details</button>
+    <button id="btn-install" class="link" hidden>Install app</button>
+  </details>
 </footer>
 
 <dialog id="scan-dialog">
@@ -99,6 +104,9 @@
     <div id="d-badges" class="badges"></div>
     <p id="d-meta" class="hint"></p>
     <p id="d-rating" class="d-rating" hidden></p>
+    <label id="d-status-row" class="d-status">Reading status
+      <select id="d-status"><option value="unread">Unread</option><option value="reading">Reading</option><option value="read">Read</option></select>
+    </label>
     <div id="d-mine" class="d-mine"></div>
     <h3 id="d-about-h">About this book</h3>
     <p id="d-desc" class="d-desc">Loading…</p>

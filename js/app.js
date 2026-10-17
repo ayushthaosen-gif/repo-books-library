@@ -40,8 +40,34 @@ function refreshTypes() {
   $('#genres').replaceChildren(...[...new Set([...GENRES, ...genres])].map(g => new Option(g)));
 }
 
+// Backup nudge: books live only on this phone unless sync is on or a backup was saved.
+const BKEY = 'books-library-last-backup';
+let saveFailed = false;
+function paintBackupNote() {
+  const note = $('#backup-note');
+  let last = 0;
+  try { last = +localStorage.getItem(BKEY) || 0; } catch (e) {}
+  const n = Store.all().length;
+  const synced = Sync.configured();
+  const stale = !synced && n >= 5 && (!last || Date.now() - last > 30 * 864e5);
+  note.hidden = !(saveFailed || stale);
+  note.classList.toggle('bad', saveFailed);
+  note.textContent = saveFailed
+    ? 'Your phone could not save the latest change (storage is full or blocked). Tap here to save a backup file now.'
+    : last ? 'It has been over a month since your last backup. Tap here to save one.' : 'Your books are stored only on this phone. Tap here to save a backup file.';
+}
+$('#backup-note').onclick = () => $('#btn-export').click();
+Store.onSaveError(() => { saveFailed = true; paintBackupNote(); });
+
+function paintFilterSummary() {
+  const on = ['#f-room', '#f-status', '#f-genre', '#f-theme'].filter(s => $(s).value && !$(s).closest('[hidden]')).length + ($('#f-lent').checked ? 1 : 0) + ($('#f-sort').value !== 'added' ? 1 : 0);
+  $('#filter-sum').textContent = on ? `Filters and sort (${on} on)` : 'Filters and sort';
+}
+
 function render() {
   refreshRooms();
+  paintBackupNote();
+  paintFilterSummary();
   refreshTypes();
   if (typeof paintFillLabel === 'function' && !fillBusy) paintFillLabel();
   const q = $('#search').value.trim().toLowerCase();
@@ -177,6 +203,8 @@ async function openDetail(b) {
   if (b.lentTo) row('Lent', `to ${b.lentTo}` + (b.lentSince ? ` since ${new Date(b.lentSince).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''));
   if (b.notes) row('Notes', b.notes);
   $('#d-move').hidden = b.list !== 'wishlist';
+  $('#d-status-row').hidden = b.kind === 'game' || b.list === 'wishlist';
+  $('#d-status').value = b.status || 'unread';
   if (b.kind === 'game') {
     $('#d-cover').hidden = false;
     $('#d-cover').src = pic(b) || genericCover(b);
@@ -201,6 +229,16 @@ async function openDetail(b) {
   }
 }
 $('#d-close').onclick = () => ddlg.close();
+// Change reading status without opening the editor.
+$('#d-status').onchange = () => {
+  if (!detailBook) return;
+  const status = $('#d-status').value;
+  Store.upsert({ id: detailBook.id, status });
+  detailBook = Store.get(detailBook.id) || detailBook;
+  const st = $('#d-badges').querySelector('.badge.unread,.badge.reading,.badge.read');
+  if (st) { st.className = 'badge ' + status; st.textContent = STATUS_LABEL[status]; }
+  render();
+};
 $('#d-edit').onclick = () => { ddlg.close(); openEdit(Store.get(detailBook.id) || detailBook); };
 $('#d-move').onclick = () => { Store.upsert({ id: detailBook.id, list: 'library' }); ddlg.close(); render(); };
 
@@ -265,6 +303,8 @@ function openEdit(b = {}, scanned = false) {
 form.onsubmit = e => {
   e.preventDefault();
   const v = Object.fromEntries(new FormData(form));
+  v.title = v.title.trim();
+  if (!v.title) { form.elements.title.focus(); return; }
   if (editingId) v.id = editingId;
   v.kind = editingKind;
   v.rating = v.rating ? +v.rating : 0;
@@ -498,6 +538,9 @@ $('#btn-export').onclick = () => {
     download: 'books-library-backup.json',
   });
   a.click();
+  try { localStorage.setItem(BKEY, String(Date.now())); } catch (e) {}
+  saveFailed = false;
+  paintBackupNote();
 };
 $('#file-import').onchange = async e => {
   const f = e.target.files[0];
@@ -626,6 +669,8 @@ $('#share-close').onclick = () => shdlg.close();
 
 render();
 Store.onChange(render);
+window.addEventListener('storage', e => { if (e.key === Store.KEY) Store.reload(); });
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 Sync.start();
 seedStarterBooks();
 
