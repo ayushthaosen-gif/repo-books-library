@@ -1,5 +1,5 @@
-// Book PDFs kept on this phone (IndexedDB) and a page-turning reader styled after Apple Books.
-// pdf.js is loaded the first time a book is opened, so it costs nothing until then.
+// Book PDFs and EPUBs kept on this phone (IndexedDB) and a page-turning reader styled after Apple Books.
+// pdf.js and epub.js are loaded the first time a book of that kind is opened, so they cost nothing until then.
 const Reader = (() => {
   const $ = s => document.querySelector(s);
   const DB = 'books-library-pdfs';
@@ -34,8 +34,24 @@ const Reader = (() => {
     }));
   }
 
+  const addScript = src => new Promise((res, rej) => {
+    const el = Object.assign(document.createElement('script'), { src });
+    el.onload = res;
+    el.onerror = () => rej(new Error('Could not load the reader. Connect once to the internet and try again.'));
+    document.head.append(el);
+  });
+  let epubLib = null;
+  function loadEpub() {
+    if (window.ePub) return Promise.resolve(window.ePub);
+    return epubLib || (epubLib = (async () => {
+      try { if (!window.JSZip) await addScript('vendor/epubjs/jszip.min.js'); await addScript('vendor/epubjs/epub.min.js'); return window.ePub; }
+      catch (e) { epubLib = null; throw e; }
+    })());
+  }
+
   const dlg = () => $('#reader-dialog');
   let pdf = null, bookId = '', n = 1, zoom = 1, token = 0, theme = 'light';
+  let epub = null, rendition = null, mode = 'pdf', fontPct = 110;
   const THEMES = ['light', 'sepia', 'night'];
   const KEY = 'books-library-reader';
   const prefs = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } };
@@ -45,6 +61,22 @@ const Reader = (() => {
     theme = THEMES.includes(t) ? t : 'light';
     dlg().dataset.theme = theme;
     savePrefs(p => { p.theme = theme; });
+    if (rendition) rendition.themes.select(theme);
+  }
+  const EPUB_THEMES = {
+    light: { bg: '#f4f1ea', fg: '#1c1c1e' },
+    sepia: { bg: '#e9dcc0', fg: '#3b2f1e' },
+    night: { bg: '#000000', fg: '#d8d8dc' },
+  };
+  const FONT = "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif";
+  function registerThemes(r) {
+    for (const [name, c] of Object.entries(EPUB_THEMES)) {
+      r.themes.register(name, {
+        body: { background: c.bg + ' !important', color: c.fg + ' !important', 'font-family': FONT + ' !important', 'line-height': '1.55 !important' },
+        'p, div, span, li, h1, h2, h3, h4, h5, h6, em, strong, blockquote': { color: c.fg + ' !important' },
+        a: { color: c.fg + ' !important' },
+      });
+    }
   }
   async function show(page, dir = 0) {
     if (!pdf) return;
@@ -72,9 +104,62 @@ const Reader = (() => {
   const turn = d => { if (pdf && n + d >= 1 && n + d <= pdf.numPages) show(n + d, d); };
   const chrome = on => dlg().classList.toggle('bare', on === undefined ? !dlg().classList.contains('bare') : !on);
 
+  const isEpub = rec => /\.epub$/i.test(rec.name || '') || (rec.blob && rec.blob.type === 'application/epub+zip');
+
+  async function openEpub(rec, id, title) {
+    const lib = await loadEpub();
+    const book = lib();
+    await book.open(await rec.blob.arrayBuffer(), 'binary');
+    epub = book; bookId = id; mode = 'epub';
+    const p = prefs();
+    fontPct = p.epubFont || 110;
+    $('#rd-title').textContent = title;
+    dlg().dataset.mode = 'epub';
+    $('#rd-pos').textContent = 'Opening…';
+    $('#rd-range').max = 100; $('#rd-range').value = 0;
+    chrome(true);
+    dlg().showModal();
+    const box = $('#rd-epub-box');
+    box.replaceChildren();
+    rendition = book.renderTo(box, { width: '100%', height: '100%', flow: 'paginated', spread: 'none' });
+    registerThemes(rendition);
+    setTheme(p.theme);
+    rendition.themes.fontSize(fontPct + '%');
+    rendition.on('relocated', loc => {
+      const cfi = loc && loc.start && loc.start.cfi;
+      if (cfi) savePrefs(q => { (q.pages = q.pages || {})[id] = cfi; });
+      const pct = book.locations && book.locations.length() ? Math.round((loc.start.percentage || 0) * 100) : null;
+      if (pct != null) { $('#rd-pos').textContent = pct + '%'; $('#rd-range').value = pct; }
+    });
+    let sx = 0, sy = 0, swiped = false;
+    rendition.on('touchstart', e => { sx = e.changedTouches[0].screenX; sy = e.changedTouches[0].screenY; swiped = false; });
+    rendition.on('touchend', e => {
+      const dx = e.changedTouches[0].screenX - sx, dy = e.changedTouches[0].screenY - sy;
+      if (Math.abs(dx) > 50 && Math.abs(dy) < 60) { swiped = true; (dx < 0 ? rendition.next() : rendition.prev()); }
+    });
+    rendition.on('click', e => {
+      if (swiped) { swiped = false; return; }
+      const f = (e.clientX || 0) / (box.clientWidth || window.innerWidth);
+      if (f < .25) rendition.prev(); else if (f > .75) rendition.next(); else chrome();
+    });
+    const saved = (p.pages || {})[id];
+    await rendition.display(typeof saved === 'string' ? saved : undefined);
+    book.ready.then(() => book.locations.generate(1200)).then(() => {
+      const loc = rendition.currentLocation();
+      if (loc && loc.start) { const pct = Math.round((book.locations.percentageFromCfi(loc.start.cfi) || 0) * 100); $('#rd-pos').textContent = pct + '%'; $('#rd-range').value = pct; }
+    }).catch(() => {});
+  }
+  function closeEpub() {
+    try { if (rendition) rendition.destroy(); if (epub) epub.destroy(); } catch (e) {}
+    rendition = null; epub = null;
+  }
+
   async function open(id, title) {
     const rec = await store.get(id);
-    if (!rec) throw new Error('This PDF is not on this phone yet.');
+    if (!rec) throw new Error('This book is not on this phone yet.');
+    if (isEpub(rec)) return openEpub(rec, id, title);
+    mode = 'pdf';
+    dlg().dataset.mode = 'pdf';
     const lib = await loadLib();
     pdf = await lib.getDocument({ data: await rec.blob.arrayBuffer() }).promise;
     bookId = id; zoom = 1;
@@ -87,6 +172,7 @@ const Reader = (() => {
   }
   function close() {
     token++;
+    closeEpub();
     if (pdf) { pdf.destroy(); pdf = null; }
     if (dlg().open) dlg().close();
   }
@@ -105,12 +191,20 @@ const Reader = (() => {
   });
   $('#rd-close').onclick = close;
   $('#rd-theme').onclick = () => setTheme(THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]);
-  $('#rd-range').oninput = e => show(+e.target.value);
-  $('#rd-zin').onclick = () => { zoom = Math.min(3, +(zoom + .5).toFixed(1)); show(n); };
-  $('#rd-zout').onclick = () => { zoom = Math.max(1, +(zoom - .5).toFixed(1)); show(n); };
-  dlg().addEventListener('close', () => { token++; if (pdf) { pdf.destroy(); pdf = null; } });
-  dlg().addEventListener('keydown', e => { if (e.key === 'ArrowRight') turn(1); else if (e.key === 'ArrowLeft') turn(-1); });
-  window.addEventListener('resize', () => { if (pdf) show(n); });
+  $('#rd-range').oninput = e => {
+    if (mode === 'epub') { if (epub && epub.locations.length()) rendition.display(epub.locations.cfiFromPercentage(+e.target.value / 100)); return; }
+    show(+e.target.value);
+  };
+  const font = d => { fontPct = Math.max(80, Math.min(220, fontPct + d)); savePrefs(p => { p.epubFont = fontPct; }); if (rendition) rendition.themes.fontSize(fontPct + '%'); };
+  $('#rd-zin').onclick = () => { if (mode === 'epub') return font(10); zoom = Math.min(3, +(zoom + .5).toFixed(1)); show(n); };
+  $('#rd-zout').onclick = () => { if (mode === 'epub') return font(-10); zoom = Math.max(1, +(zoom - .5).toFixed(1)); show(n); };
+  dlg().addEventListener('close', () => { token++; closeEpub(); if (pdf) { pdf.destroy(); pdf = null; } });
+  dlg().addEventListener('keydown', e => {
+    const d = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (!d) return;
+    if (mode === 'epub' && rendition) { d > 0 ? rendition.next() : rendition.prev(); } else turn(d);
+  });
+  window.addEventListener('resize', () => { if (pdf && mode === 'pdf') show(n); });
 
   return { has: async id => !!(await store.get(id).catch(() => null)), info: id => store.get(id).catch(() => null), put: store.put, remove: id => store.remove(id).catch(() => {}), open, close };
 })();

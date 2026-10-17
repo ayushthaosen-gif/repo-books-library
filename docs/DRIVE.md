@@ -1,4 +1,4 @@
-# Family PDFs from a private Google Drive folder
+# Family PDFs and EPUBs from a private Google Drive folder
 
 Your books folder in Google Drive stays **private**. A small function in your own Supabase project reads it for people who have a library login, so nobody needs a Google sign-in and nobody outside the family can open it.
 
@@ -38,10 +38,16 @@ Either way gives the same result.
 
 ## 5. Use it
 
-Open the app, make sure sync is signed in, tap **More > Get PDFs from Drive**. The app lists every PDF in the folder (and its sub-folders) and guesses which book each belongs to from the file name. Fix any wrong guess, tap **Save selected on this phone**, then open the book and tap **Read**. Each person does this on their own phone, because the PDFs are stored on the phone.
+Open the app, make sure sync is signed in, tap **More > Get books from Drive**. The app lists every PDF in the folder (and its sub-folders) and guesses which book each belongs to from the file name. Fix any wrong guess, tap **Save selected on this phone**, then open the book and tap **Read**. PDFs open page by page; EPUBs reflow, with text size and page colours (light, sepia, night), and reopen where you left off. Each person does this on their own phone, because the PDFs are stored on the phone.
 
 ## Limits
 
 - Very large PDFs can hit Supabase's free time or size limits for a function. If one fails, open it from Drive instead.
-- Only PDFs are listed. Only files inside the shared folder can be fetched.
+- Only PDF and EPUB files are listed (not Google Docs or shortcuts). Only files inside the shared folder can be fetched.
+- Updating the app does not update the function. After a new version of `supabase/functions/drive/index.ts`, paste it into the `drive` function again and deploy.
+
+## If the list is empty or shows an error
+
+- *"The robot cannot open the folder"*: `DRIVE_FOLDER_ID` is wrong, or the folder is not shared with the robot's email (the message names it) as Viewer.
+- *"The folder opened but has no PDF or EPUB files"*: the robot can open the folder but the files are another type (for example Google Docs) or are shortcuts.
 - To stop all access, unshare the folder from the robot or delete the secret.

@@ -1,8 +1,8 @@
 // Reads a private Google Drive folder for signed-in family members, using a Google service account.
 // The robot's key is a Supabase secret, never in the app. Only people with a library login can call this.
 //
-// GET ?action=list           -> [{ id, name, size }] for every PDF in the folder (and its sub-folders)
-// GET ?action=file&id=FILEID -> the PDF itself (only if it is inside the folder)
+// GET ?action=list           -> [{ id, name, size }] for every PDF and EPUB in the folder (and its sub-folders)
+// GET ?action=file&id=FILEID -> the file itself (only if it is inside the folder)
 //
 // Secrets: GOOGLE_SERVICE_ACCOUNT (the key file's JSON), DRIVE_FOLDER_ID, optional OWNER_EMAIL.
 const CORS = {
@@ -63,7 +63,7 @@ async function allowed(req: Request, env: Record<string, string | undefined>, fe
 const drive = (path: string, token: string, fetchFn: typeof fetch) =>
   fetchFn('https://www.googleapis.com/drive/v3/' + path, { headers: { Authorization: 'Bearer ' + token } });
 
-async function listPdfs(folder: string, token: string, fetchFn: typeof fetch) {
+async function listBooks(folder: string, token: string, fetchFn: typeof fetch) {
   const out: { id: string; name: string; size: number }[] = [];
   const queue = [folder], seen = new Set<string>();
   while (queue.length && seen.size < 40) {
@@ -77,7 +77,7 @@ async function listPdfs(folder: string, token: string, fetchFn: typeof fetch) {
       const j = await r.json();
       for (const x of j.files || []) {
         if (x.mimeType === 'application/vnd.google-apps.folder') queue.push(x.id);
-        else if (x.mimeType === 'application/pdf' || /\.pdf$/i.test(x.name)) out.push({ id: x.id, name: x.name, size: +x.size || 0 });
+        else if (x.mimeType === 'application/pdf' || x.mimeType === 'application/epub+zip' || /\.(pdf|epub)$/i.test(x.name)) out.push({ id: x.id, name: x.name, size: +x.size || 0 });
       }
       page = j.nextPageToken ? '&pageToken=' + encodeURIComponent(j.nextPageToken) : '';
     } while (page);
@@ -108,13 +108,23 @@ export async function handler(req: Request, env: Record<string, string | undefin
     const url = new URL(req.url);
     const action = url.searchParams.get('action');
     const token = await googleToken(env, fetchFn);
-    if (action === 'list') return json(await listPdfs(folder, token, fetchFn));
+    if (action === 'list') {
+      // An unshared folder lists as empty, so check the robot can really open it and say who to share with.
+      const bot = (() => { try { return JSON.parse(env.GOOGLE_SERVICE_ACCOUNT || '{}').client_email || 'the robot'; } catch (_) { return 'the robot'; } })();
+      const meta = await drive(`files/${encodeURIComponent(folder)}?fields=id,name,mimeType&supportsAllDrives=true`, token, fetchFn);
+      if (!meta.ok) return json({ error: `The robot cannot open the folder (Drive said ${meta.status}). Check DRIVE_FOLDER_ID is the id after /folders/ in the folder's address, and share the folder with ${bot} as Viewer.` }, 502);
+      const m = await meta.json();
+      if (m.mimeType !== 'application/vnd.google-apps.folder') return json({ error: 'DRIVE_FOLDER_ID is a file, not a folder. Use the id after /folders/ in the folder address.' }, 502);
+      return json(await listBooks(folder, token, fetchFn));
+    }
     if (action === 'file') {
       const id = url.searchParams.get('id') || '';
       if (!/^[\w-]{10,}$/.test(id) || !(await insideFolder(id, folder, token, fetchFn))) return json({ error: 'File not found in the folder' }, 404);
       const r = await drive(`files/${encodeURIComponent(id)}?alt=media&supportsAllDrives=true`, token, fetchFn);
       if (!r.ok) return json({ error: 'Drive said ' + r.status }, 502);
-      return new Response(r.body, { headers: { ...CORS, 'Content-Type': 'application/pdf', ...(r.headers.get('content-length') ? { 'Content-Length': r.headers.get('content-length')! } : {}) } });
+      const name = url.searchParams.get('name') || '';
+      const epub = /\.epub$/i.test(name) || (r.headers.get('content-type') || '').includes('epub');
+      return new Response(r.body, { headers: { ...CORS, 'Content-Type': epub ? 'application/epub+zip' : 'application/pdf', ...(r.headers.get('content-length') ? { 'Content-Length': r.headers.get('content-length')! } : {}) } });
     }
     return json({ error: 'Unknown action' }, 400);
   } catch (e) {
