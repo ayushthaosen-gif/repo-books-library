@@ -137,5 +137,6 @@ summary::marker{content:""}#filter-box summary::before,#more summary::before{con
 
 #rd-epub{position:absolute;inset:0;padding:calc(52px + env(safe-area-inset-top)) 0 calc(62px + env(safe-area-inset-bottom));display:none;background:var(--rd-bg)}
 #rd-epub-box{width:100%;height:100%;padding:0 16px}
+#rd-gest{position:absolute;inset:0;z-index:1;touch-action:pan-y}
 #reader-dialog[data-mode=epub] #rd-epub{display:block}
 #reader-dialog[data-mode=epub] #rd-scroll{display:none}
