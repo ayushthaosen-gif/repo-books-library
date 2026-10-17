@@ -62,22 +62,57 @@ const Scanner = (() => {
     video.srcObject = stream;
     await video.play();
     running = true;
-    if ('BarcodeDetector' in window) {
-      const det = new BarcodeDetector({ formats: mode === 'product' ? ['ean_13', 'upc_a', 'ean_8', 'qr_code'] : ['ean_13', 'qr_code'] });
-      const tick = async () => {
-        if (!running) return;
-        try { const c = await det.detect(video); if (c.length) accept(c[0].rawValue, onCode, c[0].format); else if (Date.now() - startedAt > 10000) say('Still looking. Hold the phone 15 to 20 cm away, keep the barcode flat inside the box, and try the torch.'); } catch (e) {}
-        if (running) setTimeout(tick, 150);
-      };
-      tick();
-    } else if (window.ZXing) {
-      const hints = new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS, mode === 'product' ? [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.QR_CODE] : [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.QR_CODE]], [ZXing.DecodeHintType.TRY_HARDER, true]]);
-      reader = new ZXing.BrowserMultiFormatReader(hints, 150);
-      reader.decodeFromStream(stream, video, res => {
-        if (res && running) accept(res.getText(), onCode, ZXing.BarcodeFormat[res.getBarcodeFormat()]);
-        else if (!res && running && Date.now() - startedAt > 10000) say('Still looking. Hold the phone 15 to 20 cm away, keep the barcode flat inside the box, and try the torch.');
-      });
+    // Decode only what is inside the on-screen box (a wide, short band), enlarged, so small bars are big enough
+    // to read. Every third pass looks at the whole frame instead, in case the code is held outside the box.
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    const FORMATS = mode === 'product' ? ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'qr_code'] : ['ean_13', 'ean_8', 'upc_a', 'code_128', 'qr_code'];
+    let det = null, zx = null;
+    if ('BarcodeDetector' in window) { try { det = new BarcodeDetector({ formats: FORMATS }); } catch (e) { det = null; } }
+    if (!det && window.ZXing) {
+      const F = ZXing.BarcodeFormat;
+      zx = new ZXing.MultiFormatReader();
+      zx.setHints(new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E, F.CODE_128, F.QR_CODE]], [ZXing.DecodeHintType.TRY_HARDER, true]]));
     }
+    // The box on screen, mapped to video pixels (the video is shown with object-fit: cover).
+    function boxRegion(wide) {
+      const vw = video.videoWidth, vh = video.videoHeight;
+      if (!wide) return { x: 0, y: 0, w: vw, h: vh };
+      const ca = (video.clientWidth || 4) / (video.clientHeight || 3), fa = vw / vh;
+      const visW = fa > ca ? vh * ca : vw, visH = fa > ca ? vh : vw / ca;
+      const w = Math.min(vw, visW * 0.84 * 1.1), h = Math.min(vh, visH * 0.4 * 1.2);
+      return { x: (vw - w) / 2, y: (vh - h) / 2, w, h };
+    }
+    function grab(r) {
+      const scale = Math.min(2, 1600 / r.w);
+      canvas.width = Math.max(1, Math.round(r.w * scale)); canvas.height = Math.max(1, Math.round(r.h * scale));
+      ctx.drawImage(video, r.x, r.y, r.w, r.h, 0, 0, canvas.width, canvas.height);
+    }
+    function decodeCanvas() {
+      if (!zx) return null;
+      try {
+        const src = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
+        const res = zx.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(src)));
+        return res ? { text: res.getText(), format: ZXing.BarcodeFormat[res.getBarcodeFormat()] } : null;
+      } catch (e) { return null; }
+      finally { zx.reset && zx.reset(); }
+    }
+    let n = 0;
+    const tick = async () => {
+      if (!running) return;
+      try {
+        if (video.videoWidth) {
+          grab(boxRegion(n++ % 3 !== 2));
+          let hit = null;
+          if (det) { const c = await det.detect(canvas); if (c.length) hit = { text: c[0].rawValue, format: c[0].format }; }
+          else hit = decodeCanvas();
+          if (hit && running) accept(hit.text, onCode, hit.format);
+          else if (!hit && running && Date.now() - startedAt > 10000) say('Still looking. Hold the phone 15 to 20 cm away, keep the barcode flat inside the box, and try the torch.');
+        }
+      } catch (e) {}
+      if (running) setTimeout(tick, 90);
+    };
+    tick();
   }
   function stop() {
     running = false;
