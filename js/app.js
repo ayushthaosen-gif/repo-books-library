@@ -364,17 +364,35 @@ async function findCover(b) {
   return '';
 }
 
+// Blank details of a book (author, ISBN, cover) found by matching its title across the book sources.
+// Only blanks are filled, never anything already there. Returns the patch ({} when nothing is known).
+const needsDetails = b => b.kind === 'game' ? !pic(b) : !pic(b) || !b.author || !b.isbn;
+async function fillDetails(b) {
+  const patch = {};
+  if (b.kind !== 'game' && (!b.author || !b.isbn || !pic(b))) {
+    let r = null;
+    try { r = await Lookup.matchBook(b); } catch (e) {}
+    if (r) {
+      if (!b.author && r.author) patch.author = r.author;
+      if (!b.isbn && r.isbn) patch.isbn = r.isbn;
+      if (!pic(b) && r.cover && await Lookup.imageOk(r.cover)) patch.cover = r.cover;
+    }
+  }
+  if (!pic(b) && !patch.cover) { const c = await findCover({ ...b, ...patch }); if (c) patch.cover = c; }
+  return patch;
+}
+
 // Quietly looks up covers for books that have none (at most once per book per device per day).
 async function autoCovers() {
   if (!navigator.onLine) return;
   let tried = {};
   try { tried = JSON.parse(localStorage.getItem('books-library-cover-tried') || '{}'); } catch (e) {}
   const today = new Date().toISOString().slice(0, 10);
-  const covers = async () => { for (const b of Store.all().filter(b => !pic(b) && tried[b.id] !== today)) {
+  const covers = async () => { for (const b of Store.all().filter(b => needsDetails(b) && tried[b.id] !== today)) {
     tried[b.id] = today;
     try {
-      const cover = await findCover(b);
-      if (cover) Store.upsert({ id: b.id, cover });
+      const patch = await fillDetails(b);
+      if (Object.keys(patch).length) Store.upsert({ id: b.id, ...patch });
     } catch (e) {}
   } };
   // Descriptions, public star ratings (and a last-resort cover) from Google Books
@@ -393,13 +411,13 @@ setTimeout(autoCovers, 4000);
 
 // ---- fill missing covers ----
 function paintFillLabel() {
-  const n = Store.all().filter(b => !pic(b)).length;
-  $('#btn-fill').textContent = n ? `Find missing covers (${n} without a picture)` : 'All items have a picture';
+  const n = Store.all().filter(needsDetails).length;
+  $('#btn-fill').textContent = n ? `Find missing covers and details (${n} incomplete)` : 'All items are complete';
 }
 $('#btn-fill').onclick = async () => {
   const btn = $('#btn-fill');
-  const todo = Store.all().filter(b => !pic(b) || (b.kind !== 'game' && !b.isbn && !b.author));
-  if (!todo.length) return alert('Nothing to fill in: every book and game already has a picture.');
+  const todo = Store.all().filter(needsDetails);
+  if (!todo.length) return alert('Nothing to fill in: every item already has its picture, author and ISBN.');
   if (!navigator.onLine) return alert('You are offline. Try again when connected.');
   const filled = [], notFound = [];
   let failed = 0;
@@ -408,11 +426,11 @@ $('#btn-fill').onclick = async () => {
     btn.textContent = `Filling ${i + 1} of ${todo.length}…`;
     const b = todo[i];
     try {
-      const r = b.kind === 'game' ? null : await Lookup.byTitle(b.title, b.author);
-      const patch = {};
-      if (r && !b.author && r.author) patch.author = r.author;
-      if (!pic(b)) { const c = (r && r.cover) || await findCover(b); if (c) patch.cover = c; }
-      if (Object.keys(patch).length) { Store.upsert({ id: b.id, ...patch }); filled.push(b.title + (patch.author ? ' (author: ' + patch.author + ')' : '')); }
+      const patch = await fillDetails(b);
+      if (Object.keys(patch).length) {
+        Store.upsert({ id: b.id, ...patch });
+        filled.push(b.title + ' (' + Object.keys(patch).map(k => k === 'cover' ? 'cover' : k + ': ' + patch[k]).join(', ') + ')');
+      }
       else notFound.push(b.title);
     } catch (e) { failed++; notFound.push(b.title); }
   }
