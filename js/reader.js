@@ -131,17 +131,6 @@ const Reader = (() => {
       const pct = book.locations && book.locations.length() ? Math.round((loc.start.percentage || 0) * 100) : null;
       if (pct != null) { $('#rd-pos').textContent = pct + '%'; $('#rd-range').value = pct; }
     });
-    let sx = 0, sy = 0, swiped = false;
-    rendition.on('touchstart', e => { sx = e.changedTouches[0].screenX; sy = e.changedTouches[0].screenY; swiped = false; });
-    rendition.on('touchend', e => {
-      const dx = e.changedTouches[0].screenX - sx, dy = e.changedTouches[0].screenY - sy;
-      if (Math.abs(dx) > 50 && Math.abs(dy) < 60) { swiped = true; (dx < 0 ? rendition.next() : rendition.prev()); }
-    });
-    rendition.on('click', e => {
-      if (swiped) { swiped = false; return; }
-      const f = (e.clientX || 0) / (box.clientWidth || window.innerWidth);
-      if (f < .25) rendition.prev(); else if (f > .75) rendition.next(); else chrome();
-    });
     const saved = (p.pages || {})[id];
     await rendition.display(typeof saved === 'string' ? saved : undefined);
     book.ready.then(() => book.locations.generate(1200)).then(() => {
@@ -177,6 +166,19 @@ const Reader = (() => {
     if (dlg().open) dlg().close();
   }
 
+  // EPUB pages are drawn in an iframe that swallows touches, so a transparent layer on top handles swipes and edge taps.
+  const gest = $('#rd-gest');
+  let gx = 0, gy = 0;
+  const zone = x => { const r = gest.getBoundingClientRect(), f = (x - r.left) / r.width; if (!rendition) return; if (f < .25) rendition.prev(); else if (f > .75) rendition.next(); else chrome(); };
+  gest.addEventListener('touchstart', e => { gx = e.touches[0].clientX; gy = e.touches[0].clientY; }, { passive: true });
+  gest.addEventListener('touchend', e => {
+    e.preventDefault();
+    const t = e.changedTouches[0], dx = t.clientX - gx, dy = t.clientY - gy;
+    if (Math.abs(dx) > 35 && Math.abs(dx) > Math.abs(dy) * 1.2) { if (rendition) (dx < 0 ? rendition.next() : rendition.prev()); }
+    else if (Math.abs(dx) < 12 && Math.abs(dy) < 12) zone(t.clientX);
+  });
+  gest.addEventListener('click', e => zone(e.clientX));
+
   let x0 = 0, y0 = 0;
   const box = $('#rd-scroll');
   box.addEventListener('touchstart', e => { x0 = e.touches[0].clientX; y0 = e.touches[0].clientY; }, { passive: true });
@@ -206,5 +208,20 @@ const Reader = (() => {
   });
   window.addEventListener('resize', () => { if (pdf && mode === 'pdf') show(n); });
 
-  return { has: async id => !!(await store.get(id).catch(() => null)), info: id => store.get(id).catch(() => null), put: store.put, remove: id => store.remove(id).catch(() => {}), open, close };
+  // Title, author, description and cover page that the EPUB file itself carries (null for other files).
+  async function meta(blob) {
+    try {
+      const lib = await loadEpub();
+      const book = lib();
+      await book.open(await blob.arrayBuffer(), 'binary');
+      const m = await book.loaded.metadata;
+      let cover = null;
+      try { const u = await book.coverUrl(); if (u) cover = await (await fetch(u)).blob(); } catch (e) {}
+      book.destroy();
+      const clean = t => (t || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      return { title: clean(m.title), author: clean(m.creator), description: clean(m.description), publisher: clean(m.publisher), published: clean(m.pubdate), cover };
+    } catch (e) { return null; }
+  }
+
+  return { meta, has: async id => !!(await store.get(id).catch(() => null)), info: id => store.get(id).catch(() => null), put: store.put, remove: id => store.remove(id).catch(() => {}), open, close };
 })();

@@ -327,6 +327,21 @@ async function openDetail(b) {
   }
 }
 $('#d-close').onclick = () => ddlg.close();
+// Fills blanks of a book from the metadata inside its EPUB (author, cover, description), without overwriting what is already there.
+async function fillFromFile(id, blob, name) {
+  if (!/\.epub$/i.test(name || '')) return;
+  const m = await Reader.meta(blob);
+  const b = Store.get(id);
+  if (!m || !b) return;
+  const patch = {};
+  if (!b.author && m.author) patch.author = m.author;
+  if (m.title && b.driveFile && b.title === fileBook(b.driveFile.name).title) patch.title = m.title;
+  if (!pic(b) && m.cover) { try { patch.cover = await shrink(m.cover); } catch (e) {} }
+  if (Object.keys(patch).length) Store.upsert({ id, ...patch });
+  const c = readCache()[id];
+  if (m.description && !(c && c.description)) writeCache(id, { ...(c || {}), src: (c && c.src) || 'epub', description: m.description, publisher: (c && c.publisher) || m.publisher, published: (c && c.published) || m.published });
+  render();
+}
 const pdfMsg = t => { const m = $('#d-pdfmsg'); m.hidden = !t; m.textContent = t || ''; };
 $('#d-read').onclick = async () => {
   const b = detailBook;
@@ -337,6 +352,7 @@ $('#d-read').onclick = async () => {
       const f = b.driveFile;
       const blob = await (await Sync.drive('action=file&id=' + encodeURIComponent(f.id) + '&name=' + encodeURIComponent(f.name))).blob();
       await Reader.put(b.id, new File([blob], f.name, { type: /\.epub$/i.test(f.name) ? 'application/epub+zip' : 'application/pdf' }));
+      await fillFromFile(b.id, blob, f.name);
       $('#d-unattach').hidden = false; $('#d-attach').textContent = 'Replace file';
       pdfMsg(`On this phone: ${f.name} (${(blob.size / 1048576).toFixed(1)} MB)`);
     }
@@ -352,6 +368,7 @@ $('#d-file').onchange = async e => {
   pdfMsg('Saving to this phone…');
   try {
     await Reader.put(detailBook.id, f);
+    await fillFromFile(detailBook.id, f, f.name);
     $('#d-read').hidden = $('#d-unattach').hidden = false;
     $('#d-attach').textContent = 'Replace file';
     pdfMsg(`On this phone: ${f.name} (${(f.size / 1048576).toFixed(1)} MB)`);
@@ -651,12 +668,13 @@ async function autoCovers() {
     } catch (e) {}
   } };
   // Descriptions, public star ratings (and a last-resort cover) from Google Books
-  const dets = async () => { for (const b of Store.all().filter(b => b.kind !== 'game' && !readCache()[b.id] && tried['d' + b.id] !== today)) {
+  const dets = async () => { for (const b of Store.all().filter(b => b.kind !== 'game' && (!readCache()[b.id] || (readCache()[b.id].src === 'epub' && !readCache()[b.id].rating)) && tried['d' + b.id] !== today)) {
     tried['d' + b.id] = today;
     try {
       const d = await Lookup.details(b);
       if (d) {
-        writeCache(b.id, d);
+        const old = readCache()[b.id];
+        writeCache(b.id, old && old.src === 'epub' ? { ...d, src: 'epub', description: old.description || d.description, publisher: old.publisher || d.publisher, published: old.published || d.published } : d);
         const patch = {};
         if (!pic(b) && d.cover) patch.cover = d.cover;
         if (!b.genre && d.categories) patch.genre = guessGenre(d.categories);
@@ -823,7 +841,7 @@ function bestBook(name, books, min = 0.6) {
   return score >= min ? best : null;
 }
 function fileBook(name) {
-  const base = name.replace(/\.(pdf|epub)$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const base = name.replace(/\.(pdf|epub)$/i, '').replace(/[_]+/g, ' ').replace(/\s*[\(\[][^\)\]]*(z-?lib|libgen|epub|pdf|retail|anna)[^\)\]]*[\)\]]/gi, '').replace(/\s+/g, ' ').trim();
   const m = base.match(/^(.+?)\s+-\s+(.+)$/);
   return m ? { title: m[1].trim(), author: m[2].trim() } : { title: base, author: '' };
 }
@@ -862,6 +880,7 @@ $('#btn-pdfs').onclick = async () => {
     msg(!r ? 'Already syncing…' : !r.total ? 'The folder opened but has no PDF or EPUB files in it (or its sub-folders). Google Docs and shortcuts are not listed.'
       : `Found ${r.total} file${r.total === 1 ? '' : 's'} in Drive. ${r.added} new book${r.added === 1 ? '' : 's'} added to your library and ${r.linked} matched to books you already have. Open a book and tap Read to download it.`);
     render();
+    autoCovers();
   } catch (e) { msg(e.message); }
 };
 $('#dp-close').onclick = () => dpdlg.close();
@@ -869,7 +888,7 @@ $('#dp-close').onclick = () => dpdlg.close();
 setTimeout(() => {
   try {
     if (!Sync.configured() || Date.now() - Number(localStorage.getItem('books-library-drive-sync') || 0) < 6 * 3600e3) return;
-    syncDrive().then(() => render()).catch(() => {});
+    syncDrive().then(() => { render(); autoCovers(); }).catch(() => {});
   } catch (e) {}
 }, 4000);
 
