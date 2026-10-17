@@ -334,7 +334,7 @@ $('#btn-scan').onclick = async () => {
       torch.hidden = false;
       torch.onclick = async () => { torch.textContent = (await toggle()) ? 'Torch off' : 'Torch on'; };
       torch.textContent = 'Torch on';
-    }, scanGames ? 'product' : 'isbn');
+    }, scanGames ? 'product' : 'isbn', msg => { status.textContent = msg; });
     status.textContent = scanGames ? 'Point the camera at the barcode on the game box.' : 'Point the camera at the barcode on the back of the book.';
   } catch (e) {
     status.textContent = 'Camera unavailable (' + e.message + '). You can type the ISBN instead.';

@@ -16,22 +16,34 @@ const Scanner = (() => {
     for (let i = s.length - 2, w = 3; i >= 0; i--, w = 4 - w) sum += +s[i] * w;
     return (10 - (sum % 10)) % 10 === +s[s.length - 1];
   }
-  let mode = 'isbn';
-  function accept(raw, onCode) {
-    const code = (raw || '').replace(/\D/g, '');
-    if (!(mode === 'product' ? isValidEan(code) : isValidIsbn13(code))) { lastSeen = null; return; }
+  let mode = 'isbn', note = () => {}, noteAt = 0, startedAt = 0;
+  const valid = c => (mode === 'product' ? isValidEan(c) : isValidIsbn13(c));
+  const say = text => { const t = Date.now(); if (t - noteAt > 2500) { noteAt = t; note(text); } };
+  function accept(raw, onCode, format) {
+    raw = raw || '';
+    let code = raw.replace(/\D/g, '');
+    if (/qr/i.test(format || '')) {
+      // A QR code: use it only if it carries a valid book (or product) number.
+      const hit = (raw.replace(/[-\s]/g, '').match(/\d{13}|\d{12}|\d{8}/g) || []).find(valid);
+      if (!hit) { lastSeen = null; return say('Read a QR code, but it has no book number in it (' + raw.slice(0, 40) + ').'); }
+      code = hit;
+    } else if (!valid(code)) {
+      lastSeen = null;
+      return say(code.length >= 8 ? 'Read ' + code + ', but it is not a ' + (mode === 'product' ? 'product' : 'book (ISBN)') + ' barcode. ' + (mode === 'product' ? '' : 'Use the one that starts with 978 or 979.') : 'Barcode partly read, hold steady.');
+    }
     if (code !== lastSeen) { lastSeen = code; return; }
     running = false;
     if (navigator.vibrate) navigator.vibrate(60);
     onCode(code);
   }
 
-  async function start(video, onCode, onTorch, scanMode) {
+  async function start(video, onCode, onTorch, scanMode, onNote) {
     mode = scanMode === 'product' ? 'product' : 'isbn';
+    note = onNote || (() => {}); noteAt = 0; startedAt = Date.now();
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('Camera not available (needs https).');
     lastSeen = null;
     stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
     const track = stream.getVideoTracks()[0];
@@ -51,17 +63,20 @@ const Scanner = (() => {
     await video.play();
     running = true;
     if ('BarcodeDetector' in window) {
-      const det = new BarcodeDetector({ formats: mode === 'product' ? ['ean_13', 'upc_a', 'ean_8'] : ['ean_13'] });
+      const det = new BarcodeDetector({ formats: mode === 'product' ? ['ean_13', 'upc_a', 'ean_8', 'qr_code'] : ['ean_13', 'qr_code'] });
       const tick = async () => {
         if (!running) return;
-        try { const c = await det.detect(video); if (c.length) accept(c[0].rawValue, onCode); } catch (e) {}
+        try { const c = await det.detect(video); if (c.length) accept(c[0].rawValue, onCode, c[0].format); else if (Date.now() - startedAt > 10000) say('Still looking. Hold the phone 15 to 20 cm away, keep the barcode flat inside the box, and try the torch.'); } catch (e) {}
         if (running) setTimeout(tick, 150);
       };
       tick();
     } else if (window.ZXing) {
-      const hints = new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS, mode === 'product' ? [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.EAN_8] : [ZXing.BarcodeFormat.EAN_13]], [ZXing.DecodeHintType.TRY_HARDER, true]]);
+      const hints = new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS, mode === 'product' ? [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.QR_CODE] : [ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.QR_CODE]], [ZXing.DecodeHintType.TRY_HARDER, true]]);
       reader = new ZXing.BrowserMultiFormatReader(hints, 150);
-      reader.decodeFromStream(stream, video, res => { if (res && running) accept(res.getText(), onCode); });
+      reader.decodeFromStream(stream, video, res => {
+        if (res && running) accept(res.getText(), onCode, ZXing.BarcodeFormat[res.getBarcodeFormat()]);
+        else if (!res && running && Date.now() - startedAt > 10000) say('Still looking. Hold the phone 15 to 20 cm away, keep the barcode flat inside the box, and try the torch.');
+      });
     }
   }
   function stop() {
