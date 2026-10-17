@@ -74,6 +74,50 @@ function paintFilterSummary() {
   $('#filter-sum').textContent = on ? `Filters and sort (${on} on)` : 'Filters and sort';
 }
 
+// ---- shelves view: covers standing on shelf rows, grouped by shelf, type, theme, author or status ----
+const VIEW_KEY = 'books-library-view', GROUP_KEY = 'books-library-shelf-by';
+const stored = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e) { return d; } };
+let view = stored(VIEW_KEY, 'list');
+$('#shelf-by').value = stored(GROUP_KEY, 'shelf');
+function groupsOf(b, by) {
+  const none = { shelf: 'No shelf', type: 'No type', theme: 'No theme', author: 'No author', status: 'Unread' }[by];
+  if (by === 'shelf') return [(b.room || '').trim() || none];
+  if (by === 'type') return [(b.genre || '').trim() || none];
+  if (by === 'theme') return themesOf(b).length ? themesOf(b).map(t => t.replace(/^./, c => c.toUpperCase())) : [none];
+  if (by === 'author') return [(b.author || '').trim() || none];
+  return [STATUS_LABEL[b.status || 'unread']];
+}
+function paintShelves(items) {
+  const box = $('#shelves');
+  box.replaceChildren();
+  let by = $('#shelf-by').value;
+  if (tab === 'games' && (by === 'type' || by === 'theme' || by === 'status')) by = 'shelf';
+  const groups = new Map();
+  for (const b of items) for (const g of groupsOf(b, by)) (groups.get(g) || groups.set(g, []).get(g)).push(b);
+  const isNone = g => /^No /.test(g);
+  const names = [...groups.keys()].sort((a, b) => isNone(a) - isNone(b) || a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  if (by === 'shelf' && names.length === 1 && isNone(names[0]) && items.length) box.append(Object.assign(document.createElement('p'), { className: 'shelves-hint', textContent: 'Give your books a shelf or room (in Edit) to see them on separate shelves, or change "Group by" above.' }));
+  for (const g of names) {
+    const h = document.createElement('h3');
+    h.append(g, Object.assign(document.createElement('span'), { textContent: groups.get(g).length }));
+    const row = document.createElement('div');
+    row.className = 'shelf';
+    for (const b of groups.get(g)) {
+      const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'bk', title: b.title, ariaLabel: b.title });
+      const img = Object.assign(document.createElement('img'), { src: pic(b) || genericCover(b), alt: '', loading: 'lazy' });
+      if (pic(b)) img.onerror = () => { img.onerror = null; img.src = genericCover(b); };
+      btn.append(img);
+      if (b.lentTo) btn.append(Object.assign(document.createElement('span'), { className: 'dot', title: 'Lent to ' + b.lentTo }));
+      else if (tab === 'library' && b.kind !== 'game' && b.status === 'reading') btn.append(Object.assign(document.createElement('span'), { className: 'dot reading', title: 'Reading' }));
+      btn.onclick = () => openDetail(b);
+      row.append(btn);
+    }
+    box.append(h, row);
+  }
+}
+document.querySelectorAll('.seg button').forEach(x => x.onclick = () => { view = x.dataset.view; try { localStorage.setItem(VIEW_KEY, view); } catch (e) {} render(); });
+$('#shelf-by').onchange = () => { try { localStorage.setItem(GROUP_KEY, $('#shelf-by').value); } catch (e) {} render(); };
+
 function render() {
   refreshRooms();
   paintBackupNote();
@@ -104,9 +148,15 @@ function render() {
   if (sort === 'title') items.sort(byText('title'));
   else if (sort === 'author') items.sort(byText('author'));
   else items.sort((x, y) => (y.added || '').localeCompare(x.added || ''));
+  const shelvesOn = view === 'shelves';
+  $('#list').hidden = shelvesOn;
+  $('#shelves').hidden = !shelvesOn;
+  $('#shelf-by').hidden = !shelvesOn;
+  document.querySelectorAll('.seg button').forEach(x => x.classList.toggle('on', x.dataset.view === view));
+  if (shelvesOn) paintShelves(items); else $('#shelves').replaceChildren();
   const ul = $('#list');
   ul.replaceChildren();
-  for (const b of items) {
+  for (const b of shelvesOn ? [] : items) {
     const li = document.createElement('li');
     const cover = Object.assign(document.createElement('img'), { src: pic(b) || genericCover(b), alt: '', loading: 'lazy' });
     if (pic(b)) cover.onerror = () => { cover.onerror = null; cover.src = genericCover(b); };

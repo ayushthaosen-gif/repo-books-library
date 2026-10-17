@@ -20,6 +20,12 @@
     <button data-tab="games">Games <span id="count-games">0</span></button>
   </nav>
   <input id="search" type="search" placeholder="Search title, author, type, theme, shelf">
+  <div class="viewbar">
+    <div class="seg" role="group" aria-label="View"><button type="button" data-view="list" class="on">List</button><button type="button" data-view="shelves">Shelves</button></div>
+    <select id="shelf-by" aria-label="Group shelves by" hidden>
+      <option value="shelf">Group by shelf</option><option value="type">Group by type</option><option value="theme">Group by theme</option><option value="author">Group by author</option><option value="status">Group by status</option>
+    </select>
+  </div>
   <details id="filter-box"><summary id="filter-sum">Filters and sort</summary>
   <div class="filters">
     <select id="f-room" aria-label="Shelf or room"><option value="">All shelves</option></select>
@@ -40,6 +46,7 @@
 
 <main>
   <ul id="list"></ul>
+  <div id="shelves" hidden></div>
   <p id="empty" hidden></p>
 </main>
 
