@@ -87,6 +87,15 @@ function groupsOf(b, by) {
   if (by === 'author') return [(b.author || '').trim() || none];
   return [STATUS_LABEL[b.status || 'unread']];
 }
+// Corner mark on a cover: Digital when there is a file (Drive, link or on this phone), otherwise Physical.
+function formatMark(b) {
+  const el = document.createElement('span');
+  const set = d => { el.className = 'fmt ' + (d ? 'dig' : 'phy'); el.textContent = d ? 'Digital' : 'Physical'; };
+  const dig = !!(b.driveFile || b.pdf);
+  set(dig);
+  if (!dig) Reader.has(b.id).then(h => { if (h) set(true); }).catch(() => {});
+  return el;
+}
 function paintShelves(items) {
   const box = $('#shelves');
   box.replaceChildren();
@@ -107,6 +116,7 @@ function paintShelves(items) {
       const img = Object.assign(document.createElement('img'), { src: pic(b) || genericCover(b), alt: '', loading: 'lazy' });
       if (pic(b)) img.onerror = () => { img.onerror = null; img.src = genericCover(b); };
       btn.append(img);
+      if (b.kind !== 'game') btn.append(formatMark(b));
       if (b.lentTo) btn.append(Object.assign(document.createElement('span'), { className: 'dot', title: 'Lent to ' + b.lentTo }));
       else if (tab === 'library' && b.kind !== 'game' && b.status === 'reading') btn.append(Object.assign(document.createElement('span'), { className: 'dot reading', title: 'Reading' }));
       btn.onclick = () => openDetail(b);
@@ -181,7 +191,11 @@ function render() {
     if (b.rating) badges.append(Object.assign(document.createElement('span'), { className: 'badge', textContent: '★'.repeat(b.rating), title: 'Your rating' }));
     else if (pub) badges.append(Object.assign(document.createElement('span'), { className: 'badge pub', textContent: '★ ' + pub.toFixed(1), title: 'Google Books rating' }));
     if (badges.childElementCount) info.append(badges);
-    li.append(cover, info);
+    if (b.kind !== 'game') {
+      const cv = Object.assign(document.createElement('div'), { className: 'cv' });
+      cv.append(cover, formatMark(b));
+      li.append(cv, info);
+    } else li.append(cover, info);
     if (tab === 'wishlist') {
       const mv = Object.assign(document.createElement('button'), { className: 'move', textContent: 'Got it' });
       mv.onclick = e => { e.stopPropagation(); Store.upsert({ id: b.id, list: 'library' }); render(); };
@@ -285,6 +299,7 @@ async function openDetail(b) {
     if (!detailBook || detailBook.id !== b.id) return;
     $('#d-read').hidden = $('#d-unattach').hidden = !rec;
     if (rec) { $('#d-attach').textContent = 'Replace file'; const m = $('#d-pdfmsg'); m.hidden = false; m.textContent = `On this phone: ${rec.name} (${(rec.size / 1048576).toFixed(1)} MB)`; }
+    else if (b.driveFile) { $('#d-read').hidden = false; pdfMsg('Digital book in the family Drive. Tap Read to download it to this phone and open it.'); }
   });
   $('#d-status-row').hidden = b.kind === 'game' || b.list === 'wishlist';
   $('#d-status').value = b.status || 'unread';
@@ -313,7 +328,21 @@ async function openDetail(b) {
 }
 $('#d-close').onclick = () => ddlg.close();
 const pdfMsg = t => { const m = $('#d-pdfmsg'); m.hidden = !t; m.textContent = t || ''; };
-$('#d-read').onclick = async () => { try { await Reader.open(detailBook.id, detailBook.title); } catch (e) { pdfMsg('Could not open this book: ' + e.message); } };
+$('#d-read').onclick = async () => {
+  const b = detailBook;
+  try {
+    if (b.driveFile && !(await Reader.has(b.id))) {
+      if (!confirm('This is a digital book in the family Drive. Download it to this phone and open it?')) return;
+      pdfMsg('Downloading…');
+      const f = b.driveFile;
+      const blob = await (await Sync.drive('action=file&id=' + encodeURIComponent(f.id) + '&name=' + encodeURIComponent(f.name))).blob();
+      await Reader.put(b.id, new File([blob], f.name, { type: /\.epub$/i.test(f.name) ? 'application/epub+zip' : 'application/pdf' }));
+      $('#d-unattach').hidden = false; $('#d-attach').textContent = 'Replace file';
+      pdfMsg(`On this phone: ${f.name} (${(blob.size / 1048576).toFixed(1)} MB)`);
+    }
+    await Reader.open(b.id, b.title);
+  } catch (e) { pdfMsg('Could not open this book: ' + e.message); }
+};
 $('#d-attach').onclick = () => $('#d-file').click();
 $('#d-file').onchange = async e => {
   const f = e.target.files[0];
@@ -782,7 +811,7 @@ paintDrive();
 // ---- PDFs from the family Drive folder (through the Supabase function) ----
 const dpdlg = $('#drivepdf-dialog');
 const wordsOf = t => (t || '').toLowerCase().replace(/\.pdf$/i, '').replace(/[^a-z0-9\u0900-\u097f\u0980-\u09ff]+/g, ' ').split(' ').filter(w => w.length > 1);
-function bestBook(name, books) {
+function bestBook(name, books, min = 0.6) {
   const fw = new Set(wordsOf(name));
   let best = null, score = 0;
   for (const b of books) {
@@ -791,75 +820,58 @@ function bestBook(name, books) {
     const sc = tw.filter(w => fw.has(w)).length / tw.length;
     if (sc > score) { score = sc; best = b; }
   }
-  return score >= 0.6 ? best : null;
+  return score >= min ? best : null;
 }
-const NEW = '__new';
 function fileBook(name) {
   const base = name.replace(/\.(pdf|epub)$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim();
   const m = base.match(/^(.+?)\s+-\s+(.+)$/);
   return m ? { title: m[1].trim(), author: m[2].trim() } : { title: base, author: '' };
 }
-$('#btn-pdfs').onclick = async () => {
-  const msg = t => { $('#dp-msg').hidden = !t; $('#dp-msg').textContent = t || ''; };
-  const ul = $('#dp-list');
-  ul.replaceChildren();
-  msg('');
-  dpdlg.showModal();
-  if (!Sync.configured()) return msg('Sign in to sync first (More, then the sync line). The Drive folder is read through your library login.');
-  msg('Loading the folder…');
+// Lists the Drive folder and puts every file on the shelf as a digital book. Nothing is downloaded here.
+let driveBusy = false;
+async function syncDrive() {
+  if (driveBusy) return null;
+  driveBusy = true;
   try {
     const files = await (await Sync.drive('action=list')).json();
-    const books = Store.all().filter(b => b.kind !== 'game').sort((a, b) => a.title.localeCompare(b.title));
-    msg(files.length ? '' : 'The folder opened but has no PDF or EPUB files in it (or its sub-folders). Google Docs and shortcuts are not listed.');
+    const known = new Set(Store.all().map(b => b.driveFile && b.driveFile.id).filter(Boolean));
+    let added = 0, linked = 0;
     for (const f of files) {
-      const li = document.createElement('li');
-      const guess = bestBook(f.name, books);
-      const have = guess ? await Reader.has(guess.id) : false;
-      const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: !have });
-      const sel = document.createElement('select');
-      sel.append(new Option('Skip this file', ''), new Option('Add as a new book in my library', NEW), ...books.map(b => new Option(b.title, b.id)));
-      sel.value = guess ? guess.id : NEW;
-      sel.onchange = () => { cb.checked = !!sel.value; };
-      const name = Object.assign(document.createElement('div'), { className: 'nm', textContent: f.name });
-      const st = Object.assign(document.createElement('div'), { className: 'st', textContent: (f.size ? (f.size / 1048576).toFixed(1) + ' MB' : '') + (have ? ' · already on this phone' : '') });
-      const lab = document.createElement('label');
-      lab.append(cb, Object.assign(document.createElement('div'), { style: 'flex:1' }));
-      lab.lastChild.append(name, sel, st);
-      li.append(lab);
-      li._f = f; li._cb = cb; li._sel = sel; li._st = st;
-      ul.append(li);
+      if (known.has(f.id)) continue;
+      const free = Store.all().filter(b => b.kind !== 'game' && !b.driveFile);
+      const match = bestBook(f.name, free, 0.8);
+      if (match) { Store.upsert({ id: match.id, driveFile: { id: f.id, name: f.name } }); linked++; }
+      else {
+        const fb = fileBook(f.name);
+        Store.upsert({ id: 'drv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: fb.title, author: fb.author, list: 'library', kind: 'book', status: 'unread', driveFile: { id: f.id, name: f.name } });
+        added++;
+      }
+      known.add(f.id);
     }
+    try { localStorage.setItem('books-library-drive-sync', String(Date.now())); } catch (e) {}
+    return { total: files.length, added, linked };
+  } finally { driveBusy = false; }
+}
+$('#btn-pdfs').onclick = async () => {
+  const msg = t => { $('#dp-msg').hidden = !t; $('#dp-msg').textContent = t || ''; };
+  dpdlg.showModal();
+  if (!Sync.configured()) return msg('Sign in to sync first (More, then the sync line). The Drive folder is read through your library login.');
+  msg('Reading the Drive folder…');
+  try {
+    const r = await syncDrive();
+    msg(!r ? 'Already syncing…' : !r.total ? 'The folder opened but has no PDF or EPUB files in it (or its sub-folders). Google Docs and shortcuts are not listed.'
+      : `Found ${r.total} file${r.total === 1 ? '' : 's'} in Drive. ${r.added} new book${r.added === 1 ? '' : 's'} added to your library and ${r.linked} matched to books you already have. Open a book and tap Read to download it.`);
+    render();
   } catch (e) { msg(e.message); }
 };
-$('#dp-save').onclick = async () => {
-  const items = [...$('#dp-list').children].filter(li => li._cb.checked && li._sel.value);
-  if (!items.length) return;
-  $('#dp-save').disabled = true;
-  let done = 0;
-  for (const li of items) {
-    li._st.textContent = 'Downloading…';
-    try {
-      let target = li._sel.value;
-      if (target === NEW) {
-        target = 'drv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-        const fb = fileBook(li._f.name);
-        Store.upsert({ id: target, title: fb.title, author: fb.author, list: 'library', kind: 'book', status: 'unread' });
-        li._sel.append(new Option(fb.title, target));
-        li._sel.value = target;
-      }
-      const blob = await (await Sync.drive('action=file&id=' + encodeURIComponent(li._f.id) + '&name=' + encodeURIComponent(li._f.name))).blob();
-      await Reader.put(target, new File([blob], li._f.name, { type: /\.epub$/i.test(li._f.name) ? 'application/epub+zip' : 'application/pdf' }));
-      li._st.textContent = 'Saved on this phone';
-      li._cb.checked = false;
-      done++;
-    } catch (e) { li._st.textContent = 'Failed: ' + e.message; }
-  }
-  $('#dp-save').disabled = false;
-  $('#dp-msg').hidden = false;
-  $('#dp-msg').textContent = `Saved ${done} of ${items.length}. They are in your library now; open a book and tap Read.`;
-  render();
-};
 $('#dp-close').onclick = () => dpdlg.close();
+// Quietly refresh from Drive when the app opens (at most every 6 hours).
+setTimeout(() => {
+  try {
+    if (!Sync.configured() || Date.now() - Number(localStorage.getItem('books-library-drive-sync') || 0) < 6 * 3600e3) return;
+    syncDrive().then(() => render()).catch(() => {});
+  } catch (e) {}
+}, 4000);
 
 // ---- share (read-only link) ----
 const shdlg = $('#share-dialog');
