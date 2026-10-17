@@ -87,10 +87,15 @@ function groupsOf(b, by) {
   if (by === 'author') return [(b.author || '').trim() || none];
   return [STATUS_LABEL[b.status || 'unread']];
 }
-// Corner mark on a cover: Digital when there is a file (Drive, link or on this phone), otherwise Physical.
+// Corner mark on a cover: Physical, Digital, or both when a physical copy also has a digital file (Drive, link or on this phone).
+const digitalOnly = b => !!b.digitalOnly || /^drv/.test(b.id);
 function formatMark(b) {
   const el = document.createElement('span');
-  const set = d => { el.className = 'fmt ' + (d ? 'dig' : 'phy'); el.textContent = d ? 'Digital' : 'Physical'; };
+  const set = dig => {
+    const both = dig && !digitalOnly(b);
+    el.className = 'fmt ' + (both ? 'both' : dig ? 'dig' : 'phy');
+    el.textContent = both ? 'Physical + Digital' : dig ? 'Digital' : 'Physical';
+  };
   const dig = !!(b.driveFile || b.pdf);
   set(dig);
   if (!dig) Reader.has(b.id).then(h => { if (h) set(true); }).catch(() => {});
@@ -299,7 +304,7 @@ async function openDetail(b) {
     if (!detailBook || detailBook.id !== b.id) return;
     $('#d-read').hidden = $('#d-unattach').hidden = !rec;
     if (rec) { $('#d-attach').textContent = 'Replace file'; const m = $('#d-pdfmsg'); m.hidden = false; m.textContent = `On this phone: ${rec.name} (${(rec.size / 1048576).toFixed(1)} MB)`; }
-    else if (b.driveFile) { $('#d-read').hidden = false; pdfMsg('Digital book in the family Drive. Tap Read to download it to this phone and open it.'); }
+    else if (b.driveFile) { $('#d-read').hidden = false; pdfMsg((digitalOnly(b) ? 'Digital book in the family Drive.' : 'You have a physical copy and a digital copy (in the family Drive).') + ' Tap Read to download it to this phone and open it.'); }
   });
   $('#d-status-row').hidden = b.kind === 'game' || b.list === 'wishlist';
   $('#d-status').value = b.status || 'unread';
@@ -356,7 +361,13 @@ $('#d-read').onclick = async () => {
       $('#d-unattach').hidden = false; $('#d-attach').textContent = 'Replace file';
       pdfMsg(`On this phone: ${f.name} (${(blob.size / 1048576).toFixed(1)} MB)`);
     }
-    await Reader.open(b.id, b.title);
+    const who = myName() || '';
+    const pos = ((Store.get(b.id) || {}).pos || {})[who || 'me'] || {};
+    await Reader.open(b.id, b.title, {
+      who, marks: (Store.get(b.id) || {}).marks, startCfi: pos.cfi, startAt: pos.at,
+      onMarks: m => Store.upsert({ id: b.id, marks: m }),
+      onPos: (cfi, pct, at) => Store.upsert({ id: b.id, pos: { ...((Store.get(b.id) || {}).pos || {}), [who || 'me']: { cfi, pct, at } } }),
+    });
   } catch (e) { pdfMsg('Could not open this book: ' + e.message); }
 };
 $('#d-attach').onclick = () => $('#d-file').click();
@@ -854,6 +865,7 @@ async function syncDrive() {
     const files = await (await Sync.drive('action=list')).json();
     const known = new Set(Store.all().map(b => b.driveFile && b.driveFile.id).filter(Boolean));
     let added = 0, linked = 0;
+    for (const b of Store.all().filter(b => /^drv/.test(b.id) && !b.room)) Store.upsert({ id: b.id, room: 'Digital Library', digitalOnly: true });
     for (const f of files) {
       if (known.has(f.id)) continue;
       const free = Store.all().filter(b => b.kind !== 'game' && !b.driveFile);
@@ -861,7 +873,7 @@ async function syncDrive() {
       if (match) { Store.upsert({ id: match.id, driveFile: { id: f.id, name: f.name } }); linked++; }
       else {
         const fb = fileBook(f.name);
-        Store.upsert({ id: 'drv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: fb.title, author: fb.author, list: 'library', kind: 'book', status: 'unread', driveFile: { id: f.id, name: f.name } });
+        Store.upsert({ id: 'drv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: fb.title, author: fb.author, list: 'library', kind: 'book', status: 'unread', room: 'Digital Library', digitalOnly: true, driveFile: { id: f.id, name: f.name } });
         added++;
       }
       known.add(f.id);
