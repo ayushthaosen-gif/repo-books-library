@@ -80,7 +80,7 @@ const stored = (k, d) => { try { return localStorage.getItem(k) || d; } catch (e
 let view = stored(VIEW_KEY, 'list');
 $('#shelf-by').value = stored(GROUP_KEY, 'shelf');
 function groupsOf(b, by) {
-  const none = { shelf: 'No shelf', type: 'No type', theme: 'No theme', author: 'No author', status: 'Unread' }[by];
+  const none = { shelf: 'Library Shelf', type: 'No type', theme: 'No theme', author: 'No author', status: 'Unread' }[by];
   if (by === 'shelf') return [(b.room || '').trim() || none];
   if (by === 'type') return [(b.genre || '').trim() || none];
   if (by === 'theme') return themesOf(b).length ? themesOf(b).map(t => t.replace(/^./, c => c.toUpperCase())) : [none];
@@ -94,7 +94,7 @@ function paintShelves(items) {
   if (tab === 'games' && (by === 'type' || by === 'theme' || by === 'status')) by = 'shelf';
   const groups = new Map();
   for (const b of items) for (const g of groupsOf(b, by)) (groups.get(g) || groups.set(g, []).get(g)).push(b);
-  const isNone = g => /^No /.test(g);
+  const isNone = g => g === 'Library Shelf' || /^No /.test(g);
   const names = [...groups.keys()].sort((a, b) => isNone(a) - isNone(b) || a.localeCompare(b, undefined, { sensitivity: 'base' }));
   if (by === 'shelf' && names.length === 1 && isNone(names[0]) && items.length) box.append(Object.assign(document.createElement('p'), { className: 'shelves-hint', textContent: 'Give your books a shelf or room (in Edit) to see them on separate shelves, or change "Group by" above.' }));
   for (const g of names) {
@@ -709,7 +709,7 @@ async function seedStarterBooks() {
         // Already added: only fill fields that are still blank, never overwrite the user's edits.
         const have = Store.get(id);
         const patch = {};
-        for (const f of ['author', 'isbn', 'cover']) if (have && !have[f] && b[f]) patch[f] = b[f];
+        for (const f of ['author', 'isbn', 'cover', 'room']) if (have && !have[f] && b[f]) patch[f] = b[f];
         if (Object.keys(patch).length) { Store.upsert({ id, ...patch }); added++; }
         continue;
       }
