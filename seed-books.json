@@ -146,7 +146,7 @@
  {
   "title": "Silent Constitution: Dangerous Consequences",
   "author": "Major Saras C Tripathi",
-  "isbn": "",
+  "isbn": "9788195326143",
   "list": "library",
   "status": "unread",
   "seedId": "seed-silent-constitution-dangerous-consequenc"
@@ -438,5 +438,29 @@
   "list": "library",
   "status": "unread",
   "seedId": "seed-gods-and-godmen-of-india"
+ },
+ {
+  "title": "Chanakya Neeti (Assamese)",
+  "author": "Chanakya",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-chanakya-neeti-assamese"
+ },
+ {
+  "title": "Business Sutra: A Very Indian Approach to Management",
+  "author": "Devdutt Pattanaik",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-business-sutra"
+ },
+ {
+  "title": "Harrison's Principles of Internal Medicine: Companion Handbook (11th Edition)",
+  "author": "Braunwald, Isselbacher, Petersdorf, Wilson, Martin, Fauci",
+  "isbn": "",
+  "list": "library",
+  "status": "unread",
+  "seedId": "seed-harrison-s-principles-of-internal-medicin"
  }
 ]
