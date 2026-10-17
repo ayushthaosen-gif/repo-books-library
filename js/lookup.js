@@ -276,5 +276,23 @@ const Lookup = (() => {
     }
     return '';
   }
-  return { byIsbn, byTitle, coverFor, imageOk, details, searchTitle, byBarcode, searchGame, gameCover };
+  // Fill-in for a book that has little more than a name: search by title (with the author when known) and
+  // trust only results whose title matches exactly and whose author surname matches when one is known.
+  // Returns {author, isbn, cover} from the first matching results that carry each field, or null.
+  async function matchBook(book) {
+    const base = book.title.split(':')[0].replace(/\(.*?\)/g, ' ').trim();
+    const last = s => (s || '').toLowerCase().split(',')[0].replace(/[^a-z ]+/g, ' ').trim().split(/\s+/).pop();
+    const wantTitle = norm(base), wantLast = last(book.author);
+    if (!wantTitle) return null;
+    for (const text of [base + (book.author ? ' ' + book.author.split(',')[0] : ''), base]) {
+      let hits;
+      try { hits = (await searchTitle(text)).filter(r => norm(r.title.split(':')[0]) === wantTitle && (!wantLast || (r.author || '').toLowerCase().includes(wantLast))); } catch (e) { continue; }
+      if (!hits.length) continue;
+      const pick = f => (hits.find(r => r[f]) || {})[f] || '';
+      const out = { author: pick('author'), isbn: pick('isbn'), cover: pick('cover') };
+      if (out.author || out.isbn || out.cover) return out;
+    }
+    return null;
+  }
+  return { byIsbn, byTitle, coverFor, imageOk, matchBook, details, searchTitle, byBarcode, searchGame, gameCover };
 })();
