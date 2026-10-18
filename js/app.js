@@ -17,8 +17,9 @@ const readersOf = b => Object.entries(b.readers || {}).filter(([, r]) => r && r.
 const READ_LABEL = { reading: 'reading', read: 'finished' };
 const STATUS_LABEL = { unread: 'Unread', reading: 'Reading', read: 'Read' };
 
+const DIGITAL_SHELF = 'Digital';
 function refreshRooms() {
-  const rooms = [...new Set(Store.all().map(b => (b.room || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const rooms = [...new Set([DIGITAL_SHELF, ...Store.all().map(b => (b.room || '').trim()).filter(Boolean)])].sort((a, b) => a.localeCompare(b));
   const sel = $('#f-room'), cur = sel.value;
   sel.replaceChildren(new Option('All shelves', ''), ...rooms.map(r => new Option(r, r)));
   sel.value = rooms.includes(cur) ? cur : '';
@@ -109,6 +110,7 @@ function paintShelves(items) {
   const groups = new Map();
   for (const b of items) for (const g of groupsOf(b, by)) (groups.get(g) || groups.set(g, []).get(g)).push(b);
   const isNone = g => g === 'Library Shelf' || /^No /.test(g);
+  if (by === 'shelf' && tab !== 'games' && !$('#search').value.trim() && !$('#f-room').value && !groups.has(DIGITAL_SHELF)) groups.set(DIGITAL_SHELF, []);
   const names = [...groups.keys()].sort((a, b) => isNone(a) - isNone(b) || a.localeCompare(b, undefined, { sensitivity: 'base' }));
   if (by === 'shelf' && names.length === 1 && isNone(names[0]) && items.length) box.append(Object.assign(document.createElement('p'), { className: 'shelves-hint', textContent: 'Give your books a shelf or room (in Edit) to see them on separate shelves, or change "Group by" above.' }));
   for (const g of names) {
@@ -127,6 +129,7 @@ function paintShelves(items) {
       btn.onclick = () => openDetail(b);
       row.append(btn);
     }
+    if (!groups.get(g).length) row.append(Object.assign(document.createElement('span'), { className: 'shelf-empty', textContent: 'Books from your Drive folder appear here.' }));
     box.append(h, row);
   }
 }
@@ -865,7 +868,7 @@ async function syncDrive() {
     const files = await (await Sync.drive('action=list')).json();
     const known = new Set(Store.all().map(b => b.driveFile && b.driveFile.id).filter(Boolean));
     let added = 0, linked = 0;
-    for (const b of Store.all().filter(b => /^drv/.test(b.id) && !b.room)) Store.upsert({ id: b.id, room: 'Digital Library', digitalOnly: true });
+    for (const b of Store.all().filter(b => /^drv/.test(b.id) && (!b.room || b.room === 'Digital Library'))) Store.upsert({ id: b.id, room: DIGITAL_SHELF, digitalOnly: true });
     for (const f of files) {
       if (known.has(f.id)) continue;
       const free = Store.all().filter(b => b.kind !== 'game' && !b.driveFile);
@@ -873,7 +876,7 @@ async function syncDrive() {
       if (match) { Store.upsert({ id: match.id, driveFile: { id: f.id, name: f.name } }); linked++; }
       else {
         const fb = fileBook(f.name);
-        Store.upsert({ id: 'drv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: fb.title, author: fb.author, list: 'library', kind: 'book', status: 'unread', room: 'Digital Library', digitalOnly: true, driveFile: { id: f.id, name: f.name } });
+        Store.upsert({ id: 'drv' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: fb.title, author: fb.author, list: 'library', kind: 'book', status: 'unread', room: DIGITAL_SHELF, digitalOnly: true, driveFile: { id: f.id, name: f.name } });
         added++;
       }
       known.add(f.id);
