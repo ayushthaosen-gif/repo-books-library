@@ -100,6 +100,16 @@ const Reader = (() => {
           set('float', 'none'); set('display', 'block'); set('margin', '.6em auto'); set('max-width', '100%'); set('height', 'auto');
         }
       }
+      // A picture, or a wrapper around it, wider than the column would run into the next page: pull each back to the column.
+      const colW = d.body.clientWidth;
+      for (const im of d.querySelectorAll('img, svg')) {
+        for (let n = im; n && n !== d.body && n !== d.documentElement; n = n.parentElement) {
+          if (n.getBoundingClientRect().width <= colW + 1) continue;
+          const sp = (k, v) => n.style.setProperty(k, v, 'important');
+          sp('max-width', '100%'); sp('box-sizing', 'border-box'); sp('margin-left', '0'); sp('margin-right', '0');
+          if (n === im) { sp('width', 'auto'); sp('height', 'auto'); } else sp('width', '100%');
+        }
+      }
     };
     fix();
     for (const im of d.querySelectorAll('img')) if (!im.complete) im.addEventListener('load', fix, { once: true });
