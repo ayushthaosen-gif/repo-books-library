@@ -254,3 +254,10 @@ details[open]>summary{color:var(--fg)}
 #shelves h3 .nm{flex:1}
 .shelf.shut{display:none}
 #shelves h3 span.nm{color:var(--fg);font-weight:600}
+
+/* Reader page box: clear of the toolbar, folio under the text, nothing leaks into it */
+#rd-epub{padding:calc(36px + env(safe-area-inset-top)) 0 calc(28px + env(safe-area-inset-bottom) * .5)}
+#rd-under{top:calc(36px + env(safe-area-inset-top));bottom:calc(28px + env(safe-area-inset-bottom) * .5)}
+#rd-flap{top:calc(36px + env(safe-area-inset-top));bottom:calc(28px + env(safe-area-inset-bottom) * .5)}
+#rd-epub-box{overflow:hidden}
+#rd-folio{bottom:calc(6px + env(safe-area-inset-bottom) * .35);line-height:1.2}

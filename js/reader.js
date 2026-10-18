@@ -84,6 +84,18 @@ const Reader = (() => {
   };
   const FONT = "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif";
   const SANS = "-apple-system, 'Helvetica Neue', Arial, sans-serif";
+  // Decorative drop-cap pictures float beside the first lines; keep them to about four lines so they never swallow the page.
+  function tameImages(contents) {
+    const d = contents.document;
+    const fix = () => {
+      for (const im of d.querySelectorAll('img')) {
+        const cs = d.defaultView.getComputedStyle(im);
+        if (cs.float !== 'none' && cs.float) { im.style.setProperty('max-height', '4.6em', 'important'); im.style.setProperty('width', 'auto', 'important'); im.style.setProperty('height', 'auto', 'important'); im.style.setProperty('max-width', '30%', 'important'); }
+      }
+    };
+    fix();
+    for (const im of d.querySelectorAll('img')) if (!im.complete) im.addEventListener('load', fix, { once: true });
+  }
   function registerThemes(r) {
     const p = prefs(), fam = { serif: FONT, sans: SANS, orig: '' }[p.font || 'serif'], lh = p.lh || 1.55;
     for (const [name, c] of Object.entries(EPUB_THEMES)) {
@@ -91,6 +103,9 @@ const Reader = (() => {
         body: { margin: '0 !important', background: c.bg + ' !important', color: c.fg + ' !important', ...(fam ? { 'font-family': fam + ' !important' } : {}), 'line-height': lh + ' !important' },
         'p, div, span, li, h1, h2, h3, h4, h5, h6, em, strong, blockquote': { color: c.fg + ' !important' },
         a: { color: c.fg + ' !important' },
+        'img, svg, video': { 'max-width': '100% !important', 'max-height': '86vh !important', 'object-fit': 'contain', 'break-inside': 'avoid', '-webkit-column-break-inside': 'avoid', 'page-break-inside': 'avoid' },
+        'h1, h2, h3, h4, h5, h6': { 'break-after': 'avoid', 'page-break-after': 'avoid', '-webkit-column-break-after': 'avoid' },
+        'p, li': { orphans: '2', widows: '2' },
       });
     }
   }
@@ -190,6 +205,7 @@ const Reader = (() => {
     if (under || !epub) return;
     under = epub.renderTo($('#rd-under'), { width: '100%', height: '100%', flow: 'paginated', spread: 'none' });
     registerThemes(under);
+    under.hooks.content.register(tameImages);
     under.themes.select(theme);
     under.themes.fontSize(fontPct + '%');
   }
@@ -416,6 +432,7 @@ const Reader = (() => {
     box.replaceChildren(); $('#rd-under').replaceChildren(); showUnder(false);
     rendition = book.renderTo(box, { width: '100%', height: '100%', flow: 'paginated', spread: 'none' });
     registerThemes(rendition);
+    rendition.hooks.content.register(tameImages);
     setTheme(p.theme);
     rendition.themes.fontSize(fontPct + '%');
     rendition.on('relocated', loc => {
