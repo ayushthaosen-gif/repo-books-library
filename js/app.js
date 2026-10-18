@@ -102,6 +102,9 @@ function formatMark(b) {
   if (!dig) Reader.has(b.id).then(h => { if (h) set(true); }).catch(() => {});
   return el;
 }
+let zoomFrom = null;
+const SHUT_KEY = 'books-library-shut';
+const collapsedShelves = () => { try { return JSON.parse(localStorage.getItem(SHUT_KEY)) || {}; } catch (e) { return {}; } };
 function paintShelves(items) {
   const box = $('#shelves');
   box.replaceChildren();
@@ -115,9 +118,15 @@ function paintShelves(items) {
   if (by === 'shelf' && names.length === 1 && isNone(names[0]) && items.length) box.append(Object.assign(document.createElement('p'), { className: 'shelves-hint', textContent: 'Give your books a shelf or room (in Edit) to see them on separate shelves, or change "Group by" above.' }));
   for (const g of names) {
     const h = document.createElement('h3');
-    h.append(g, Object.assign(document.createElement('span'), { textContent: groups.get(g).length }));
     const row = document.createElement('div');
     row.className = 'shelf';
+    const ck = by + '|' + g, shut = collapsedShelves();
+    h.append(Object.assign(document.createElement('span'), { className: 'chev', textContent: '\u25BE' }), Object.assign(document.createElement('span'), { className: 'nm', textContent: g }), Object.assign(document.createElement('span'), { textContent: groups.get(g).length }));
+    h.setAttribute('role', 'button'); h.tabIndex = 0;
+    const paint = () => { const c = !!collapsedShelves()[ck]; h.classList.toggle('shut', c); row.classList.toggle('shut', c); h.setAttribute('aria-expanded', String(!c)); };
+    const flipShelf = () => { const m = collapsedShelves(); if (m[ck]) delete m[ck]; else m[ck] = 1; try { localStorage.setItem(SHUT_KEY, JSON.stringify(m)); } catch (e) {} paint(); };
+    h.onclick = flipShelf; h.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flipShelf(); } };
+    paint();
     for (const b of groups.get(g)) {
       const btn = Object.assign(document.createElement('button'), { type: 'button', className: 'bk', title: b.title, ariaLabel: b.title });
       const img = Object.assign(document.createElement('img'), { src: pic(b) || genericCover(b), alt: '', loading: 'lazy' });
@@ -126,7 +135,7 @@ function paintShelves(items) {
       if (b.kind !== 'game') btn.append(formatMark(b));
       if (b.lentTo) btn.append(Object.assign(document.createElement('span'), { className: 'dot', title: 'Lent to ' + b.lentTo }));
       else if (tab === 'library' && b.kind !== 'game' && b.status === 'reading') btn.append(Object.assign(document.createElement('span'), { className: 'dot reading', title: 'Reading' }));
-      btn.onclick = () => openDetail(b);
+      btn.onclick = () => { zoomFrom = img.getBoundingClientRect(); openDetail(b); };
       row.append(btn);
     }
     if (!groups.get(g).length) row.append(Object.assign(document.createElement('span'), { className: 'shelf-empty', textContent: 'Books from your Drive folder appear here.' }));
@@ -209,7 +218,7 @@ function render() {
       mv.onclick = e => { e.stopPropagation(); Store.upsert({ id: b.id, list: 'library' }); render(); };
       li.append(mv);
     }
-    li.onclick = () => openDetail(b);
+    li.onclick = () => { zoomFrom = cover.getBoundingClientRect(); openDetail(b); };
     ul.append(li);
   }
   const empty = $('#empty');
@@ -318,13 +327,13 @@ async function openDetail(b) {
     $('#d-about-h').textContent = 'About this game';
     $('#d-desc').textContent = (b.desc || '').replace(/\(\s*[;,]\s*(?:from|pronounced)[^)]*\)/i, '').replace(/\(\s*[;,]?\s*\)/g, '').replace(/\s{2,}/g, ' ').trim() || (b.notes ? '' : 'Tap Edit to add notes, player count or play time.');
     $('#d-links').replaceChildren(Object.assign(document.createElement('a'), { href: 'https://boardgamegeek.com/geeksearch.php?action=search&objecttype=boardgame&q=' + encodeURIComponent(b.title), textContent: 'Look up on BoardGameGeek', target: '_blank', rel: 'noopener' }));
-    if (!ddlg.open) ddlg.showModal();
+    zoomOpen(ddlg, zoomFrom); zoomFrom = null;
     return;
   }
   const cached = readCache()[b.id];
   paintDetail(b, cached);
   if (!cached) $('#d-desc').textContent = 'Loading…';
-  if (!ddlg.open) ddlg.showModal();
+  zoomOpen(ddlg, zoomFrom); zoomFrom = null;
   if (cached || !navigator.onLine) { if (!cached) $('#d-desc').textContent = 'Connect to the internet to load the description and ratings.'; return; }
   try {
     const d = await Lookup.details(b);
@@ -367,7 +376,7 @@ $('#d-read').onclick = async () => {
     const who = myName() || '';
     const pos = ((Store.get(b.id) || {}).pos || {})[who || 'me'] || {};
     await Reader.open(b.id, b.title, {
-      who, marks: (Store.get(b.id) || {}).marks, startCfi: pos.cfi, startAt: pos.at,
+      who, from: $('#d-cover').getBoundingClientRect(), marks: (Store.get(b.id) || {}).marks, startCfi: pos.cfi, startAt: pos.at,
       onMarks: m => Store.upsert({ id: b.id, marks: m }),
       onPos: (cfi, pct, at) => Store.upsert({ id: b.id, pos: { ...((Store.get(b.id) || {}).pos || {}), [who || 'me']: { cfi, pct, at } } }),
     });
@@ -708,11 +717,11 @@ setTimeout(autoCovers, 4000);
 function paintFillLabel() {
   const n = Store.all().filter(needsDetails).length;
   $('#btn-fill').textContent = n ? `Find missing covers and details (${n} incomplete)` : 'All items are complete';
+  const nd = Store.all().filter(b => b.kind !== 'game' && (digitalOnly(b) || b.driveFile) && needsDetails(b)).length;
+  $('#btn-fill-dig').textContent = nd ? `Find covers and details for digital books (${nd} incomplete)` : 'Digital books are complete';
 }
-$('#btn-fill').onclick = async () => {
-  const btn = $('#btn-fill');
-  const todo = Store.all().filter(needsDetails);
-  if (!todo.length) return alert('Nothing to fill in: every item already has its picture, author and ISBN.');
+async function runFill(todo, btn, label, emptyMsg) {
+  if (!todo.length) return alert(emptyMsg);
   if (!navigator.onLine) return alert('You are offline. Try again when connected.');
   const filled = [], notFound = [];
   let failed = 0;
@@ -731,9 +740,11 @@ $('#btn-fill').onclick = async () => {
   }
   fillBusy = false;
   paintFillLabel();
-  alert(`Updated ${filled.length} of ${todo.length} items.\n\n` + (filled.length ? 'Check these:\n' + filled.join('\n') + '\n\n' : '') +
+  alert(`Updated ${filled.length} of ${todo.length} ${label}.\n\n` + (filled.length ? 'Check these:\n' + filled.join('\n') + '\n\n' : '') +
     (notFound.length ? `No confident match for ${notFound.length}${failed ? ' (some lookups failed, try again)' : ''}. Open them and tap Edit, then Take or choose photo.` : ''));
-};
+}
+$('#btn-fill').onclick = () => runFill(Store.all().filter(needsDetails), $('#btn-fill'), 'items', 'Nothing to fill in: every item already has its picture, author and ISBN.');
+$('#btn-fill-dig').onclick = () => runFill(Store.all().filter(b => b.kind !== 'game' && (digitalOnly(b) || b.driveFile) && needsDetails(b)), $('#btn-fill-dig'), 'digital books', 'Every digital book already has its cover, author and ISBN.');
 
 // ---- backup ----
 $('#btn-export').onclick = () => {
