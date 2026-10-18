@@ -1,5 +1,17 @@
 // Book PDFs and EPUBs kept on this phone (IndexedDB) and a page-turning reader styled after Apple Books.
 // pdf.js and epub.js are loaded the first time a book of that kind is opened, so they cost nothing until then.
+// Opens a dialog with a zoom that grows out of rect (the tapped cover), or out of the middle.
+window.zoomOpen = (d, rect) => {
+  if (d.open) return;
+  d.style.animation = 'none';
+  d.showModal();
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const r = d.getBoundingClientRect();
+  const ox = rect ? rect.left + rect.width / 2 - r.left : r.width / 2, oy = rect ? rect.top + rect.height / 2 - r.top : r.height / 2;
+  d.style.transformOrigin = `${ox}px ${oy}px`;
+  const a = d.animate([{ transform: `scale(${rect ? .35 : .88})`, opacity: 0 }, { transform: 'none', opacity: 1 }], { duration: 340, easing: 'cubic-bezier(.2,.8,.2,1)' });
+  a.onfinish = a.oncancel = () => { d.style.transformOrigin = ''; };
+};
 const Reader = (() => {
   const $ = s => document.querySelector(s);
   const DB = 'books-library-pdfs';
@@ -51,6 +63,7 @@ const Reader = (() => {
 
   const dlg = () => $('#reader-dialog');
   let pdf = null, bookId = '', n = 1, zoom = 1, token = 0, theme = 'light';
+  let under = null, underFor = null, underBusy = null;
   let epub = null, rendition = null, mode = 'pdf', fontPct = 110;
   const THEMES = ['light', 'sepia', 'night'];
   const KEY = 'books-library-reader';
@@ -62,6 +75,7 @@ const Reader = (() => {
     dlg().dataset.theme = theme;
     savePrefs(p => { p.theme = theme; });
     if (rendition) rendition.themes.select(theme);
+    if (under) under.themes.select(theme);
   }
   const EPUB_THEMES = {
     light: { bg: '#f4f1ea', fg: '#1c1c1e' },
@@ -171,21 +185,49 @@ const Reader = (() => {
     const step = now => { const k = Math.min(1, (now - t0) / ms); curlAt(from + (to - from) * ease(k)); if (k < 1) requestAnimationFrame(step); else res(); };
     requestAnimationFrame(step);
   });
+  // A second, hidden rendition draws the page under the curl, so the next (or previous) page shows as the corner lifts.
+  function ensureUnder() {
+    if (under || !epub) return;
+    under = epub.renderTo($('#rd-under'), { width: '100%', height: '100%', flow: 'paginated', spread: 'none' });
+    registerThemes(under);
+    under.themes.select(theme);
+    under.themes.fontSize(fontPct + '%');
+  }
+  // Puts the page that follows (dir 1) or is the current one (dir -1) into the under layer.
+  function prepUnder(dir) {
+    const loc = rendition && rendition.currentLocation();
+    if (!loc || !loc.start) return Promise.resolve(false);
+    const key = dir + '|' + loc.start.cfi;
+    if (underFor === key && underBusy) return underBusy;
+    ensureUnder();
+    underFor = key;
+    underBusy = (async () => {
+      try {
+        if (dir > 0) { await under.display(loc.end.cfi); await under.next(); }
+        else await under.display(loc.start.cfi);
+        return underFor === key;
+      } catch (e) { return false; }
+    })();
+    return underBusy;
+  }
+  const showUnder = on => { $('#rd-under').style.visibility = on ? 'visible' : 'hidden'; };
   async function flip(dir) {
     if (!rendition || flipping) return;
     flipping = true;
     const el = $('#rd-epub-box'), style = reduce() ? 'none' : (prefs().turn || 'curl');
     try {
       if (style === 'curl') {
-        if (dir > 0) { await sweep(0, 1, 360); await rendition.next(); curlEnd(); el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140 }); }
-        else { curlAt(1); await rendition.prev(); await sweep(1, 0, 360); }
+        const ok = await Promise.race([prepUnder(dir), new Promise(r => setTimeout(() => r(false), 900))]);
+        if (ok) showUnder(true);
+        if (dir > 0) { await sweep(0, 1, 380); await rendition.next(); curlEnd(); showUnder(false); if (!ok) el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 140 }); }
+        else { curlAt(1); await rendition.prev(); await sweep(1, 0, 380); }
       } else if (style === 'slide') {
         const out = el.animate([{ transform: 'none', opacity: 1 }, { transform: `translateX(${-dir * 36}px)`, opacity: .1 }], { duration: 110, easing: 'ease-in', fill: 'forwards' });
         await Promise.all([out.finished, dir > 0 ? rendition.next() : rendition.prev()]);
         out.cancel();
         el.animate([{ transform: `translateX(${dir * 36}px)`, opacity: .1 }, { transform: 'none', opacity: 1 }], { duration: 170, easing: 'ease-out' });
       } else await (dir > 0 ? rendition.next() : rendition.prev());
-    } catch (e) {} finally { curlEnd(); flipping = false; }
+    } catch (e) {} finally { curlEnd(); showUnder(false); flipping = false; setTimeout(() => { if ((prefs().turn || 'curl') === 'curl') prepUnder(1); }, 60); }
   }
 
   // ---- sheets (contents, search, notes, display, dictionary) ----
@@ -254,7 +296,7 @@ const Reader = (() => {
 
   const chips = (label, opts, cur, set) => el('div', { className: 'rd-opt' }, el('span', { textContent: label }), el('div', { className: 'chips' }, ...opts.map(([v, t]) => { const b = el('button', { type: 'button', className: 'rd-chip' + (String(cur) === String(v) ? ' on' : ''), textContent: t, onclick: () => { set(v); showDisplay(); } }); return b; })));
   function retype() { if (!rendition) return; registerThemes(rendition); rendition.themes.select(theme); rendition.themes.fontSize(fontPct + '%'); }
-  function applyMargin() { const m = { s: 4, m: 12, l: 30 }[prefs().margin || 'm']; $('#rd-epub-box').style.setProperty('--rd-pad', m + 'px'); if (rendition) setTimeout(() => { try { rendition.resize(); } catch (e) {} }, 30); }
+  function applyMargin() { const m = { s: 4, m: 12, l: 30 }[prefs().margin || 'm']; $('#rd-epub-box').style.setProperty('--rd-pad', m + 'px'); $('#rd-under').style.setProperty('--rd-pad', m + 'px'); if (rendition) setTimeout(() => { try { rendition.resize(); if (under) under.resize(); } catch (e) {} underFor = null; }, 30); }
   function showDisplay() {
     const p = prefs();
     sheet('Display', [
@@ -368,10 +410,10 @@ const Reader = (() => {
     $('#rd-range').max = 100; $('#rd-range').value = 0;
     closeSheet(); hidePop(); curlEnd();
     chrome(true);
-    dlg().showModal();
+    zoomOpen(dlg(), opts.from);
     applyMargin();
     const box = $('#rd-epub-box');
-    box.replaceChildren();
+    box.replaceChildren(); $('#rd-under').replaceChildren(); showUnder(false);
     rendition = book.renderTo(box, { width: '100%', height: '100%', flow: 'paginated', spread: 'none' });
     registerThemes(rendition);
     setTheme(p.theme);
@@ -381,6 +423,7 @@ const Reader = (() => {
       if (cfi) savePrefs(q => { (q.pages = q.pages || {})[id] = cfi; (q.at = q.at || {})[id] = Date.now(); });
       hidePop();
       folio(loc);
+      if (!flipping && (prefs().turn || 'curl') === 'curl') setTimeout(() => prepUnder(1), 250);
     });
     for (const h of marks.hl) paintHl(h);
     const local = (p.pages || {})[id], localAt = (p.at || {})[id] || 0;
@@ -390,7 +433,8 @@ const Reader = (() => {
   }
   function closeEpub() {
     try { flushPos(); } catch (e) {}
-    try { if (rendition) rendition.destroy(); if (epub) epub.destroy(); } catch (e) {}
+    try { if (under) under.destroy(); if (rendition) rendition.destroy(); if (epub) epub.destroy(); } catch (e) {}
+    under = null; underFor = null; underBusy = null;
     rendition = null; epub = null; lastLoc = null; cbPos = null; cbMarks = null;
     try { closeSheet(); hidePop(); curlEnd(); } catch (e) {}
   }
@@ -408,7 +452,7 @@ const Reader = (() => {
     setTheme(p.theme);
     $('#rd-title').textContent = title;
     chrome(true);
-    dlg().showModal();
+    zoomOpen(dlg(), (opts || {}).from);
     await show((p.pages || {})[id] || 1);
   }
   function close() {
@@ -420,6 +464,7 @@ const Reader = (() => {
 
   // EPUB pages are drawn in an iframe that swallows touches, so a transparent layer on top handles swipes and edge taps.
   const gest = $('#rd-gest');
+  for (const t of ['contextmenu', 'selectstart', 'dragstart']) gest.addEventListener(t, e => e.preventDefault());
   let gx = 0, gy = 0;
   const zone = x => { const r = gest.getBoundingClientRect(), f = (x - r.left) / r.width; if (!rendition) return; if (f < .25) flip(-1); else if (f > .75) flip(1); else chrome(); };
   let held = null, longDone = false;
@@ -457,7 +502,7 @@ const Reader = (() => {
     if (mode === 'epub') { if (epub && epub.locations.length()) rendition.display(epub.locations.cfiFromPercentage(+e.target.value / 100)); return; }
     show(+e.target.value);
   };
-  const font = d => { fontPct = Math.max(80, Math.min(220, fontPct + d)); savePrefs(p => { p.epubFont = fontPct; }); if (rendition) rendition.themes.fontSize(fontPct + '%'); };
+  const font = d => { fontPct = Math.max(80, Math.min(220, fontPct + d)); savePrefs(p => { p.epubFont = fontPct; }); if (rendition) rendition.themes.fontSize(fontPct + '%'); if (under) under.themes.fontSize(fontPct + '%'); underFor = null; };
   $('#rd-zin').onclick = () => { if (mode === 'epub') return font(10); zoom = Math.min(3, +(zoom + .5).toFixed(1)); show(n); };
   $('#rd-zout').onclick = () => { if (mode === 'epub') return font(-10); zoom = Math.max(1, +(zoom - .5).toFixed(1)); show(n); };
   dlg().addEventListener('close', () => { token++; closeEpub(); if (pdf) { pdf.destroy(); pdf = null; } });

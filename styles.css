@@ -108,7 +108,7 @@ summary::marker{content:""}#filter-box summary::before,#more summary::before{con
 .rd-row{display:flex;align-items:center;gap:10px}
 .rd-tools{display:flex;justify-content:space-around;margin-top:0;padding-top:0}
 .rd-tools button{font-size:.85rem;min-height:34px;padding:4px 10px}
-#reader-dialog[data-mode=pdf] .rd-tools,#reader-dialog[data-mode=pdf] #rd-mark{display:none}
+#reader-dialog[data-mode=pdf] #rd-toc,#reader-dialog[data-mode=pdf] #rd-find,#reader-dialog[data-mode=pdf] #rd-notes,#reader-dialog[data-mode=pdf] #rd-mark{display:none}
 .rd-mid{flex:1;text-align:center;font-size:.8rem}.rd-mid input{width:100%;min-height:28px;padding:0;border:0;background:none;accent-color:var(--rd-fg)}
 #reader-dialog button{background:none;color:var(--rd-fg);font-weight:600;padding:8px 10px;min-height:40px}
 #reader-dialog.bare .rd-top{transform:translateY(-100%);opacity:0;pointer-events:none}
@@ -234,3 +234,23 @@ details[open]>summary{color:var(--fg)}
 .backup{box-shadow:var(--sh1)}
 #empty{animation:fade .4s ease-out}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}
+
+/* Reader: under-page for the curl, compact footer, no native selection on the gesture layer */
+#rd-under{position:absolute;left:0;right:0;top:calc(8px + env(safe-area-inset-top));bottom:calc(12px + env(safe-area-inset-bottom) * .5);padding:0 var(--rd-pad,12px);visibility:hidden;pointer-events:none;background:var(--rd-bg)}
+#rd-epub-box{position:relative;background:var(--rd-bg)}
+#rd-gest{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.rd-foot{padding-top:0}
+.rd-foot .rd-mid{padding:2px 4px 0}
+.rd-foot .rd-mid input{display:block;min-height:24px}
+#rd-pos{display:block;line-height:1.2;padding-bottom:2px}
+.rd-tools{justify-content:space-between}
+.rd-tools button{padding:4px 8px;min-height:36px}
+#rd-zout,#rd-zin{min-width:40px}
+.rd-tools button#rd-zin,.rd-tools button#rd-zout{font-weight:700}
+.rd-foot .rd-mid{flex:none}
+#shelves h3{cursor:pointer;-webkit-user-select:none;user-select:none;align-items:center;padding:4px 0}
+#shelves h3 .chev{display:inline-block;width:1.1em;margin-right:2px;color:var(--muted);transition:transform .25s var(--ease)}
+#shelves h3.shut .chev{transform:rotate(-90deg)}
+#shelves h3 .nm{flex:1}
+.shelf.shut{display:none}
+#shelves h3 span.nm{color:var(--fg);font-weight:600}
