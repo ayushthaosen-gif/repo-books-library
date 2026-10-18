@@ -84,13 +84,21 @@ const Reader = (() => {
   };
   const FONT = "'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif";
   const SANS = "-apple-system, 'Helvetica Neue', Arial, sans-serif";
-  // Decorative drop-cap pictures float beside the first lines; keep them to about four lines so they never swallow the page.
+  // Pictures must never sit on top of text. A small floated picture is a drop cap and is kept to about four lines; any other
+  // floated or positioned picture is put back into the normal flow of the page.
   function tameImages(contents) {
-    const d = contents.document;
+    const d = contents.document, w = d.defaultView;
     const fix = () => {
-      for (const im of d.querySelectorAll('img')) {
-        const cs = d.defaultView.getComputedStyle(im);
-        if (cs.float !== 'none' && cs.float) { im.style.setProperty('max-height', '4.6em', 'important'); im.style.setProperty('width', 'auto', 'important'); im.style.setProperty('height', 'auto', 'important'); im.style.setProperty('max-width', '30%', 'important'); }
+      for (const im of d.querySelectorAll('img, svg')) {
+        const cs = w.getComputedStyle(im), set = (k, v) => im.style.setProperty(k, v, 'important');
+        const floated = cs.float && cs.float !== 'none', placed = cs.position === 'absolute' || cs.position === 'fixed' || cs.position === 'relative';
+        const r = im.getBoundingClientRect();
+        const dropCap = floated && im.tagName === 'IMG' && r.width <= w.innerWidth * .36 && r.height <= w.innerHeight * .3;
+        if (placed) { set('position', 'static'); set('transform', 'none'); set('opacity', '1'); set('z-index', 'auto'); }
+        if (dropCap) { set('max-height', '4.6em'); set('width', 'auto'); set('height', 'auto'); set('max-width', '30%'); set('margin-left', '0'); }
+        else if (floated || placed || parseFloat(cs.marginLeft) < 0 || parseFloat(cs.marginRight) < 0) {
+          set('float', 'none'); set('display', 'block'); set('margin', '.6em auto'); set('max-width', '100%'); set('height', 'auto');
+        }
       }
     };
     fix();
@@ -103,7 +111,7 @@ const Reader = (() => {
         body: { margin: '0 !important', background: c.bg + ' !important', color: c.fg + ' !important', ...(fam ? { 'font-family': fam + ' !important' } : {}), 'line-height': lh + ' !important' },
         'p, div, span, li, h1, h2, h3, h4, h5, h6, em, strong, blockquote': { color: c.fg + ' !important' },
         a: { color: c.fg + ' !important' },
-        'img, svg, video': { 'max-width': '100% !important', 'max-height': '86vh !important', 'object-fit': 'contain', 'break-inside': 'avoid', '-webkit-column-break-inside': 'avoid', 'page-break-inside': 'avoid' },
+        'img, svg, video': { 'max-width': '100% !important', 'max-height': '86vh !important', 'object-fit': 'contain' },
         'h1, h2, h3, h4, h5, h6': { 'break-after': 'avoid', 'page-break-after': 'avoid', '-webkit-column-break-after': 'avoid' },
         'p, li': { orphans: '2', widows: '2' },
       });
